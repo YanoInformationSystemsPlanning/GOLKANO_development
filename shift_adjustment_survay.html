@@ -94,7 +94,41 @@
     #messageBox.success { background: #28a745; }
     #messageBox.error { background: #dc3545; }
     #messageBox.info { background: #007bff; }
-</style>
+
+    #passwordModal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    }
+    #passwordModal .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      text-align: center;
+      width: 250px;
+    }
+    #passwordModal input {
+      width: 100%;
+      padding: 5px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    #passwordModal button {
+      margin-top: 10px;
+      padding: 5px 10px;
+      font-size: 14px;
+      margin-right: 5px;
+    }
+    #passwordError {
+      color: red;
+      display: none;
+      margin-top: 5px;
+    }
+  </style>
 </head>
 <body>
   <!-- トップに戻るボタン -->
@@ -111,9 +145,13 @@
     <button id="exportBtn" style="display:none;">回答提出</button>
   </div>
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.820</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.724</div>
 
   <div id="messageBox"></div>
+
+  <div id="passwordModal">
+    <div class="modal-content">
+      <div id="passwordPrompt">パスワードを入力してください</div>
       <input type="text" id="passwordInput" maxlength="3">
       <div id="passwordError">パスワードが違います</div>
       <button id="passwordOkBtn">OK</button>
@@ -137,7 +175,15 @@
 
   const loadingText = document.getElementById("loadingText");
   const loadingSpinner = document.getElementById("loadingSpinner");
-const gasUrl = "https://script.google.com/macros/s/AKfycbzi42o5RlvzGZcGGtlGl_7Fvds2Iqo_du2qT10W0BJkkdQgL1_m0ok20L5DS4y09CMF/exec";
+
+  const passwordModal = document.getElementById("passwordModal");
+  const passwordPrompt = document.getElementById("passwordPrompt");
+  const passwordInput = document.getElementById("passwordInput");
+  const passwordError = document.getElementById("passwordError");
+  const passwordOkBtn = document.getElementById("passwordOkBtn");
+  const passwordCancelBtn = document.getElementById("passwordCancelBtn");
+
+  const gasUrl = "https://script.google.com/macros/s/AKfycbzi42o5RlvzGZcGGtlGl_7Fvds2Iqo_du2qT10W0BJkkdQgL1_m0ok20L5DS4y09CMF/exec";
   const folderKeyword = "shift_adjustment_survay";
 
   let allInputLines = [];
@@ -145,8 +191,12 @@ const gasUrl = "https://script.google.com/macros/s/AKfycbzi42o5RlvzGZcGGtlGl_7Fv
   let year = '';
   let month = '';
   let highlightData = [];
-let isNewFile = false;
-const userName = localStorage.getItem("userName") || "未設定";
+  let currentPassword = '';
+  let isNewFile = false;
+  let passwordCallback = null;
+  let savedPasswordForCheck = '';
+
+  const userName = localStorage.getItem("userName") || "未設定";
   memberNameSpan.textContent = userName;
 
   // ページDOM読み込み直後に「処理中」を表示
@@ -295,11 +345,39 @@ const userName = localStorage.getItem("userName") || "未設定";
     passwordInput.value = '';
     passwordError.style.display = 'none';
     passwordModal.style.display = 'flex';
-     = callback;
-     = savedPassword;
+    passwordCallback = callback;
+    savedPasswordForCheck = savedPassword;
     passwordInput.focus();
   }
-function loadDataForMember(member) {
+
+  passwordOkBtn.addEventListener('click', () => {
+    const pw = passwordInput.value.trim();
+    if (pw === '') {
+      passwordError.textContent = 'パスワードを入力してください';
+      passwordError.style.display = 'block';
+      return;
+    }
+    if (savedPasswordForCheck && pw !== savedPasswordForCheck) {
+      passwordError.textContent = 'パスワードが違います';
+      passwordError.style.display = 'block';
+      passwordInput.value = '';
+      return;
+    }
+    if (!savedPasswordForCheck && pw.length !== 3) {
+      passwordError.textContent = 'パスワードは3桁で入力してください';
+      passwordError.style.display = 'block';
+      return;
+    }
+    passwordModal.style.display = 'none';
+    if (passwordCallback) passwordCallback(pw);
+  });
+
+  passwordCancelBtn.addEventListener('click', () => {
+    passwordModal.style.display = 'none';
+    if (passwordCallback) passwordCallback(null);
+  });
+
+  function loadDataForMember(member) {
     showLoading("処理中...");
     const prefix = `${member}_`;
     fetch(`${gasUrl}?action=list&folder=${folderKeyword}&prefix=${encodeURIComponent(prefix)}`)
@@ -313,26 +391,36 @@ function loadDataForMember(member) {
             .then(res => res.text())
             .then(outputText => {
               const outputLines = outputText.split('\n').filter(l => l.trim());
-              const merged = mergeInputAndOutput(inputLines, outputLines);
-loadGridFromData(merged);
-exportBtn.style.display = 'inline-block';
-});
+              const header = parseCSVLine(outputLines[0]);
+              const savedPassword = header[2] || '';
+              openPasswordModal("回答済です。内容の確認 or 修正にはパスワードを入力してください。", pw => {
+                if (pw === null) { hideLoading(); return; }
+                currentPassword = savedPassword;
+                const merged = mergeInputAndOutput(inputLines, outputLines);
+                loadGridFromData(merged);
+                exportBtn.style.display = 'inline-block';
+              }, savedPassword);
+            });
         } else {
           isNewFile = true;
-const ym = parseCSVLine(inputLines[0]);
-year = ym[1];
-month = ym[2];
-targetDateSpan.textContent = `対象：${year}年${month}月`;
+          openPasswordModal("新規作成です。3桁のパスワードを入力してください。", pw => {
+            if (pw === null) { hideLoading(); return; }
+            currentPassword = pw;
+            const ym = parseCSVLine(inputLines[0]);
+            year = ym[1];
+            month = ym[2];
+            targetDateSpan.textContent = `対象：${year}年${month}月`;
 
-const merged = [
-  inputLines[1],
-  inputLines[2],
-  inputLines[3],
-  ...inputLines.slice(4)
-];
-loadGridFromData(merged);
-exportBtn.style.display = 'inline-block';
-}
+            const merged = [
+              inputLines[1],
+              inputLines[2],
+              inputLines[3],
+              ...inputLines.slice(4)
+            ];
+            loadGridFromData(merged);
+            exportBtn.style.display = 'inline-block';
+          });
+        }
       })
       .catch(err => {
         showMessage("ファイルチェックに失敗しました。\n" + err.message, 'error');
@@ -342,7 +430,7 @@ exportBtn.style.display = 'inline-block';
 
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
-    let csv = `回答者,${userName}\n年月,${year},${month}\n`;
+    let csv = `回答者,${userName},${currentPassword}\n年月,${year},${month}\n`;
     const rowCount = cellRefs.length;
     const colCount = 32;
     for (let r = 0; r < rowCount; r++) {
