@@ -111,7 +111,7 @@
     <button id="exportBtn" style="display:none;">回答提出</button>
   </div>
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.725（PW機能撤去）</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.726（PW撤去・命名固定）</div>
 
   <div id="messageBox"></div>
 
@@ -336,7 +336,7 @@
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
 
-    // 先頭行からパスワード列を削除
+    // 出力CSV（パスワード列なし）
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
     const rowCount = cellRefs.length;
     const colCount = 32;
@@ -354,16 +354,10 @@
       csv += row.join(',') + '\n';
     }
 
-    const member = userName.replace(/ /g, '_');
-    const targetYm = `${year}${month}`;
-    const now = new Date();
-    const yyyymmdd = now.getFullYear().toString() +
-                     String(now.getMonth() + 1).padStart(2, '0') +
-                     String(now.getDate()).padStart(2, '0');
-    const hhmmss = String(now.getHours()).padStart(2, '0') +
-                   String(now.getMinutes()).padStart(2, '0') +
-                   String(now.getSeconds()).padStart(2, '0');
-    const filename = `${member}_${targetYm}_${yyyymmdd}_${hhmmss}作成.txt`;
+    // ★ ファイル名規則：[メンバ名]_[YYYYMM]シフト.txt
+    const member = userName;                 // そのまま使用（スペースも可）
+    const targetYm = `${year}${month}`;      // 例：202502
+    const filename = `${member}_${targetYm}シフト.txt`;
 
     fetch(`${gasUrl}?folder=${folderKeyword}&filename=${encodeURIComponent(filename)}`, {
       method: 'POST',
