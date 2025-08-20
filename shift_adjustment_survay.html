@@ -19,7 +19,6 @@
     .fixed-col { position:sticky; left:0; background:#f8f8f8; padding-left:2.5em; z-index:4; }
     .header-1.fixed-col, .header-2.fixed-col { background:#eee; z-index:6; }
     .highlight-red { background:red !important; color:#fff; }
-    .highlight-gray { background:gray !important; color:#fff; }
     .red { color:red; }
     #messageBox { position:fixed; top:10px; right:10px; background:#333; color:#fff; padding:10px 20px; border-radius:5px; opacity:0; transition:opacity .3s; z-index:9999; pointer-events:none; }
     #messageBox.show { opacity:1; }
@@ -37,7 +36,7 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.730（PW撤去／対応可能行廃止／YYYYMM=input 1行目／既存=完全一致のみ）</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.732（PW撤去／対応可能行廃止／YYYYMM=input1行目／編集=完全一致のみ／赤=1保存）</div>
   <div id="messageBox"></div>
 
 <script>
@@ -111,7 +110,7 @@
           cell.classList.add("header-2");
           cell.innerHTML = c>0 ? (['土','日'].includes(val) ? `<span class="red">${val}</span>` : val) : "曜日";
         } else {
-          // データ行（クリックでR/Gハイライト切替）
+          // データ行（クリックで赤⇔なし）
           cell.textContent = val;
           if (c>0 && val!==""){ cell.onclick = () => handleCellClick(r, c, cell); }
         }
@@ -125,22 +124,16 @@
     hideLoading();
   }
 
+  // クリック：赤⇔なし（灰色は廃止）
   function handleCellClick(rowIndex, colIndex, cell){
-    const currentState = cell.classList.contains("highlight-red") ? "red" :
-                         cell.classList.contains("highlight-gray") ? "gray" : "none";
-    const columnHasRed = cellRefs.some((row, r) => r>=2 && row[colIndex].classList.contains("highlight-red"));
-
-    if (currentState === "red"){
-      cell.classList.remove("highlight-red"); cell.classList.add("highlight-gray");
-    } else if (currentState === "gray"){
-      cell.classList.remove("highlight-gray");
+    if (cell.classList.contains("highlight-red")){
+      cell.classList.remove("highlight-red");
     } else {
-      if (!columnHasRed){ cell.classList.add("highlight-red"); }
-      else { cell.classList.add("highlight-gray"); }
+      cell.classList.add("highlight-red");
     }
   }
 
-  // 出力CSVのメタ2行（回答者/年月）に続く行を、グリッド2行目以降へ適用
+  // 読み込み：値が "1" のセルだけ赤にする（旧R/G互換なし）
   function applyHighlight(){
     if (!highlightData.length) return;
     // highlightData[0]: 回答者,xxx
@@ -150,9 +143,8 @@
       const line = highlightData[2 + r] || '';
       const row = line.split(',');
       for (let c=1; c<row.length && c<cellRefs[r].length; c++){
-        if (r >= 2) { // データ行のみ R/G を反映
-          if (row[c] === 'R') cellRefs[r][c].classList.add("highlight-red");
-          else if (row[c] === 'G') cellRefs[r][c].classList.add("highlight-gray");
+        if (r >= 2 && row[c] === '1'){ // データ行のみ
+          cellRefs[r][c].classList.add("highlight-red");
         }
       }
     }
@@ -206,7 +198,7 @@
       .catch(err => { showMessage("ファイルチェックに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
-  // 保存：メタ2行（回答者/年月）＋ グリッド行（先頭2行は文字、以降はR/G）
+  // 保存：ヘッダ2行は文字、データ行は赤=1／それ以外=空
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
@@ -219,9 +211,7 @@
         if (r < 2){
           row.push(cellRefs[r][c].textContent);
         } else {
-          if (cellRefs[r][c].classList.contains("highlight-red")) row.push('R');
-          else if (cellRefs[r][c].classList.contains("highlight-gray")) row.push('G');
-          else row.push('');
+          row.push(cellRefs[r][c].classList.contains("highlight-red") ? '1' : '');
         }
       }
       csv += row.join(',') + '\n';
