@@ -6,25 +6,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Cache-Control" content="no-store" />
   <style>
-    html, body {
-      margin: 0; padding: 0; font-family: sans-serif;
-      width: 100vw; height: 100vh; overflow: auto; overscroll-behavior: none;
-    }
+    html, body { margin:0; padding:0; font-family:sans-serif; width:100vw; height:100vh; overflow:auto; overscroll-behavior:none; }
     .header-bar { display:flex; align-items:center; gap:1em; padding:5px 10px; background:#f0f0f0; border-bottom:1px solid #ccc; font-size:14px; }
     button { padding:2px 6px; font-size:14px; cursor:pointer; }
     .status { font-weight:bold; color:red; display:inline-flex; align-items:center; gap:6px; }
     .spinner { border:3px solid #f3f3f3; border-top:3px solid red; border-radius:50%; width:14px; height:14px; animation:spin 1s linear infinite; display:none; }
     @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
     .grid { display:grid; grid-template-columns:110px repeat(31,36px); grid-auto-rows:30px; min-width:max-content; -webkit-overflow-scrolling:touch; }
-    .cell { border:1px solid #ccc; text-align:center; line-height:30px; white-space:nowrap; user-select:none; background:white; font-size:14px; overflow:hidden; }
+    .cell { border:1px solid #ccc; text-align:center; line-height:30px; white-space:nowrap; user-select:none; background:#fff; font-size:14px; overflow:hidden; }
     .header-1 { position:sticky; top:0; background:#eee; z-index:5; }
     .header-2 { position:sticky; top:30px; background:#eee; z-index:5; }
     .fixed-col { position:sticky; left:0; background:#f8f8f8; padding-left:2.5em; z-index:4; }
     .header-1.fixed-col, .header-2.fixed-col { background:#eee; z-index:6; }
-    .highlight-red { background:red !important; color:white; }
-    .highlight-gray { background:gray !important; color:white; }
+    .highlight-red { background:red !important; color:#fff; }
+    .highlight-gray { background:gray !important; color:#fff; }
     .red { color:red; }
-    #messageBox { position:fixed; top:10px; right:10px; background:#333; color:white; padding:10px 20px; border-radius:5px; opacity:0; transition:opacity .3s; z-index:9999; pointer-events:none; }
+    #messageBox { position:fixed; top:10px; right:10px; background:#333; color:#fff; padding:10px 20px; border-radius:5px; opacity:0; transition:opacity .3s; z-index:9999; pointer-events:none; }
     #messageBox.show { opacity:1; }
     #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
   </style>
@@ -40,7 +37,7 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.727（PW撤去／「対応可能」廃止／YYYYMMはinputの1行目）</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.730（PW撤去／対応可能行廃止／YYYYMM=input 1行目／既存=完全一致のみ）</div>
   <div id="messageBox"></div>
 
 <script>
@@ -60,8 +57,9 @@
 
   let allInputLines = [];
   let cellRefs = [];
-  let year = '';   // input_data.txt の1行目から取得
+  let year = '';      // input_data.txt 1行目から取得
   let month = '';
+  let targetYm = '';  // YYYYMM
   let highlightData = [];
 
   const userName = localStorage.getItem("userName") || "未設定";
@@ -74,16 +72,17 @@
   function showMessage(msg, type='info'){ messageBox.className = `show ${type}`; messageBox.textContent = msg; setTimeout(()=>messageBox.classList.remove('show'),3000); }
   function parseCSVLine(line){ return line.split(',').map(s => s.trim()); }
 
-  // 初期ロード：input_data.txt を読み、YYYY/MM を決定（→命名＆表示で使用）
+  // 初期ロード：input_data.txt を読み、YYYY/MM → targetYm を決定
   function initAllData(){
     showLoading("処理中...");
     fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=input_data.txt`)
       .then(res => res.text())
       .then(text => {
         allInputLines = text.split('\n').filter(l => l.trim());
-        const ym = parseCSVLine(allInputLines[0]); // 例: 年月,2025,08
+        const ym = parseCSVLine(allInputLines[0]); // 例: 年月,2025,07
         year  = ym[1];
         month = ym[2];
+        targetYm = `${year}${String(month).padStart(2,'0')}`;
         targetDateSpan.textContent = `対象：${year}年${month}月`;
         loadDataForMember(userName);
       })
@@ -116,7 +115,6 @@
           cell.textContent = val;
           if (c>0 && val!==""){ cell.onclick = () => handleCellClick(r, c, cell); }
         }
-
         fragment.appendChild(cell);
         row.push(cell);
       }
@@ -142,24 +140,29 @@
     }
   }
 
-  // 出力CSVの2行（回答者/年月）を除いた「2 + r」行目を参照してハイライト適用
+  // 出力CSVのメタ2行（回答者/年月）に続く行を、グリッド2行目以降へ適用
   function applyHighlight(){
     if (!highlightData.length) return;
-    for (let r=2; r<cellRefs.length; r++){
+    // highlightData[0]: 回答者,xxx
+    // highlightData[1]: 年月,YYYY,MM
+    // highlightData[2] 以降：ヘッダ日付行, 曜日行, データ行...
+    for (let r=0; r<cellRefs.length; r++){
       const line = highlightData[2 + r] || '';
       const row = line.split(',');
       for (let c=1; c<row.length && c<cellRefs[r].length; c++){
-        if (row[c] === 'R') cellRefs[r][c].classList.add("highlight-red");
-        else if (row[c] === 'G') cellRefs[r][c].classList.add("highlight-gray");
+        if (r >= 2) { // データ行のみ R/G を反映
+          if (row[c] === 'R') cellRefs[r][c].classList.add("highlight-red");
+          else if (row[c] === 'G') cellRefs[r][c].classList.add("highlight-gray");
+        }
       }
     }
   }
 
-  // 旧出力があっても、表示は input_data の2ヘッダ（日付/曜日）＋以降データを使用
+  // input_data のヘッダ2行（「日付」「曜日」）＋データ行をベースに表示
   function mergeInputAndOutput(inputLines, outputLines){
-    highlightData = [...outputLines]; // ハイライトは出力に従う（ヘッダは常に input 基準）
+    highlightData = [...outputLines]; // ハイライトは出力準拠
     const merged = [];
-    // input_data.txt 構成（「対応可能」行は削除済）:
+    // input_data.txt 構成：
     // 0: 年月,YYYY,MM
     // 1: 日付行
     // 2: 曜日行
@@ -170,16 +173,21 @@
     return merged;
   }
 
+  // 既存：完全一致 [メンバ名]_[YYYYMM]シフト.txt があれば編集、無ければ新規
   function loadDataForMember(member){
     showLoading("処理中...");
     const prefix = `${member}_`;
+    const exactName = `${member}_${targetYm}シフト.txt`;
+
     fetch(`${gasUrl}?action=list&folder=${folderKeyword}&prefix=${encodeURIComponent(prefix)}`)
       .then(res => res.json())
       .then(data => {
         const inputLines = allInputLines;
-        if (data.result === "success" && data.files.length > 0){
-          const latest = data.files.sort((a,b)=> b.localeCompare(a))[0];
-          fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(latest)}`)
+        const hasExact = (data.result === "success") && Array.isArray(data.files) && data.files.includes(exactName);
+
+        if (hasExact){
+          // 既存（編集モード）
+          fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(exactName)}`)
             .then(res => res.text())
             .then(outputText => {
               const outputLines = outputText.split('\n').filter(l => l.trim());
@@ -189,7 +197,7 @@
             })
             .catch(err => { showMessage("ファイル読み込みに失敗しました。\n"+err.message,'error'); hideLoading(); });
         } else {
-          // 新規：input_data の2ヘッダ＋データ行で表示
+          // 新規（input_data ベース）
           const merged = [ inputLines[1], inputLines[2], ...inputLines.slice(3) ];
           loadGridFromData(merged);
           exportBtn.style.display = 'inline-block';
@@ -198,12 +206,13 @@
       .catch(err => { showMessage("ファイルチェックに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
-  // 保存：メタ2行（回答者/年月）＋ グリッド全行（先頭2行は文字、以降はR/G）
+  // 保存：メタ2行（回答者/年月）＋ グリッド行（先頭2行は文字、以降はR/G）
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
     const rowCount = cellRefs.length;
     const colCount = 32;
+
     for (let r=0; r<rowCount; r++){
       const row = [];
       for (let c=0; c<colCount; c++){
@@ -218,10 +227,8 @@
       csv += row.join(',') + '\n';
     }
 
-    // ファイル名：[メンバ名]_[YYYYMM]シフト.txt（YYYYMMは input_data.txt の1行目から）
-    const member = userName;
-    const targetYm = `${year}${String(month).padStart(2,'0')}`;
-    const filename = `${member}_${targetYm}シフト.txt`;
+    // ファイル名：[メンバ名]_[YYYYMM]シフト.txt（YYYYMMは input_data.txt から）
+    const filename = `${userName}_${targetYm}シフト.txt`;
 
     fetch(`${gasUrl}?folder=${folderKeyword}&filename=${encodeURIComponent(filename)}`, {
       method:'POST', body:csv, headers:{ 'Content-Type':'text/plain' }
