@@ -7,128 +7,51 @@
   <meta http-equiv="Cache-Control" content="no-store" />
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      font-family: sans-serif;
-      width: 100vw;
-      height: 100vh;
-      overflow: auto;
-      overscroll-behavior: none; /* iOS15+や最新ブラウザ向けバウンス防止 */
+      margin: 0; padding: 0; font-family: sans-serif;
+      width: 100vw; height: 100vh; overflow: auto; overscroll-behavior: none;
     }
-    .header-bar {
-      display: flex;
-      align-items: center;
-      gap: 1em;
-      padding: 5px 10px;
-      background: #f0f0f0;
-      border-bottom: 1px solid #ccc;
-      font-size: 14px;
-    }
-    button {
-      padding: 2px 6px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    .status {
-      font-weight: bold;
-      color: red; /* 赤文字 */
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .spinner {
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid red;
-      border-radius: 50%;
-      width: 14px;
-      height: 14px;
-      animation: spin 1s linear infinite;
-      display: none; /* 初期は非表示 */
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 110px repeat(31, 36px);
-      grid-auto-rows: 30px;
-      min-width: max-content;
-      -webkit-overflow-scrolling: touch;
-    }
-    .cell {
-      border: 1px solid #ccc;
-      text-align: center;
-      line-height: 30px;
-      white-space: nowrap;
-      user-select: none;
-      background: white;
-      font-size: 14px;
-      overflow: hidden;
-    }
-    .header-1 { position: sticky; top: 0; background: #eee; z-index: 5; }
-    .header-2 { position: sticky; top: 30px; background: #eee; z-index: 5; }
-    .header-3 { position: sticky; top: 60px; background: #ccffcc; z-index: 5; }
-    .fixed-col { position: sticky; left: 0; background: #f8f8f8; padding-left: 2.5em; z-index: 4; }
-    .header-1.fixed-col { background: #eee; z-index: 6; }
-    .header-2.fixed-col { background: #eee; z-index: 6; }
-    .header-3.fixed-col { background: #ccffcc !important; z-index: 6; }
-    .highlight-red { background: red !important; color: white; }
-    .highlight-gray { background: gray !important; color: white; }
-    .red { color: red; }
-
-    #messageBox {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: #333;
-      color: white;
-      padding: 10px 20px;
-      border-radius: 5px;
-      opacity: 0;
-      transition: opacity 0.3s;
-      z-index: 9999;
-      pointer-events: none;
-    }
-    #messageBox.show { opacity: 1; }
-    #messageBox.success { background: #28a745; }
-    #messageBox.error { background: #dc3545; }
-    #messageBox.info { background: #007bff; }
+    .header-bar { display:flex; align-items:center; gap:1em; padding:5px 10px; background:#f0f0f0; border-bottom:1px solid #ccc; font-size:14px; }
+    button { padding:2px 6px; font-size:14px; cursor:pointer; }
+    .status { font-weight:bold; color:red; display:inline-flex; align-items:center; gap:6px; }
+    .spinner { border:3px solid #f3f3f3; border-top:3px solid red; border-radius:50%; width:14px; height:14px; animation:spin 1s linear infinite; display:none; }
+    @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+    .grid { display:grid; grid-template-columns:110px repeat(31,36px); grid-auto-rows:30px; min-width:max-content; -webkit-overflow-scrolling:touch; }
+    .cell { border:1px solid #ccc; text-align:center; line-height:30px; white-space:nowrap; user-select:none; background:white; font-size:14px; overflow:hidden; }
+    .header-1 { position:sticky; top:0; background:#eee; z-index:5; }
+    .header-2 { position:sticky; top:30px; background:#eee; z-index:5; }
+    .fixed-col { position:sticky; left:0; background:#f8f8f8; padding-left:2.5em; z-index:4; }
+    .header-1.fixed-col, .header-2.fixed-col { background:#eee; z-index:6; }
+    .highlight-red { background:red !important; color:white; }
+    .highlight-gray { background:gray !important; color:white; }
+    .red { color:red; }
+    #messageBox { position:fixed; top:10px; right:10px; background:#333; color:white; padding:10px 20px; border-radius:5px; opacity:0; transition:opacity .3s; z-index:9999; pointer-events:none; }
+    #messageBox.show { opacity:1; }
+    #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
   </style>
 </head>
 <body>
-  <!-- トップに戻るボタン -->
   <button onclick="location.href='top_menu.html'">トップに戻る</button>
 
   <div class="header-bar">
-    <span>回答者：</span>
-    <span id="memberName"></span>
+    <span>回答者：</span><span id="memberName"></span>
     <span id="targetDate"></span>
-    <span id="loadingStatus" class="status">
-      <span id="loadingText"></span>
-      <span class="spinner" id="loadingSpinner"></span>
-    </span>
+    <span id="loadingStatus" class="status"><span id="loadingText"></span><span class="spinner" id="loadingSpinner"></span></span>
     <button id="exportBtn" style="display:none;">回答提出</button>
   </div>
-  <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.726（PW撤去・命名固定）</div>
 
+  <div class="grid" id="grid"></div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.727（PW撤去／「対応可能」廃止／YYYYMMはinputの1行目）</div>
   <div id="messageBox"></div>
 
 <script>
   // iOSバウンス防止
-  document.addEventListener('touchmove', function(e) {
-    if (!e.target.closest('.grid')) {
-      e.preventDefault();
-    }
-  }, { passive: false });
+  document.addEventListener('touchmove', e => { if (!e.target.closest('.grid')) e.preventDefault(); }, { passive:false });
 
   const grid = document.getElementById("grid");
   const memberNameSpan = document.getElementById("memberName");
   const targetDateSpan = document.getElementById("targetDate");
   const exportBtn = document.getElementById("exportBtn");
   const messageBox = document.getElementById("messageBox");
-
   const loadingText = document.getElementById("loadingText");
   const loadingSpinner = document.getElementById("loadingSpinner");
 
@@ -137,93 +60,63 @@
 
   let allInputLines = [];
   let cellRefs = [];
-  let year = '';
+  let year = '';   // input_data.txt の1行目から取得
   let month = '';
   let highlightData = [];
 
   const userName = localStorage.getItem("userName") || "未設定";
   memberNameSpan.textContent = userName;
 
-  // ページDOM読み込み直後に「処理中」を表示
-  document.addEventListener("DOMContentLoaded", () => {
-    showLoading("処理中...");
-  });
+  document.addEventListener("DOMContentLoaded", () => { showLoading("処理中..."); });
 
-  function showLoading(msg) {
-    loadingText.textContent = msg;
-    loadingSpinner.style.display = "inline-block";
-  }
+  function showLoading(msg){ loadingText.textContent = msg; loadingSpinner.style.display = "inline-block"; }
+  function hideLoading(){ loadingText.textContent = ""; loadingSpinner.style.display = "none"; }
+  function showMessage(msg, type='info'){ messageBox.className = `show ${type}`; messageBox.textContent = msg; setTimeout(()=>messageBox.classList.remove('show'),3000); }
+  function parseCSVLine(line){ return line.split(',').map(s => s.trim()); }
 
-  function hideLoading() {
-    loadingText.textContent = "";
-    loadingSpinner.style.display = "none";
-  }
-
-  function showMessage(msg, type = 'info') {
-    messageBox.className = `show ${type}`;
-    messageBox.textContent = msg;
-    setTimeout(() => messageBox.classList.remove('show'), 3000);
-  }
-
-  function parseCSVLine(line) {
-    return line.split(',').map(s => s.trim());
-  }
-
-  function initAllData() {
+  // 初期ロード：input_data.txt を読み、YYYY/MM を決定（→命名＆表示で使用）
+  function initAllData(){
     showLoading("処理中...");
     fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=input_data.txt`)
       .then(res => res.text())
       .then(text => {
         allInputLines = text.split('\n').filter(l => l.trim());
+        const ym = parseCSVLine(allInputLines[0]); // 例: 年月,2025,08
+        year  = ym[1];
+        month = ym[2];
+        targetDateSpan.textContent = `対象：${year}年${month}月`;
         loadDataForMember(userName);
       })
-      .catch(err => {
-        showMessage("ヘッダ情報の読み込みに失敗しました。\n" + err.message, 'error');
-        hideLoading();
-      });
+      .catch(err => { showMessage("ヘッダ情報の読み込みに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
-  function loadGridFromData(lines) {
-    grid.innerHTML = '';
-    cellRefs = [];
+  function loadGridFromData(lines){
+    grid.innerHTML = ''; cellRefs = [];
     const data = lines.map(parseCSVLine);
     const rowCount = data.length;
     const colCount = 32;
     const fragment = document.createDocumentFragment();
 
-    for (let r = 0; r < rowCount; r++) {
+    for (let r=0; r<rowCount; r++){
       const row = [];
-      for (let c = 0; c < colCount; c++) {
+      for (let c=0; c<colCount; c++){
         const cell = document.createElement("div");
         cell.className = "cell";
         const val = data[r]?.[c] ?? '';
-        if (c === 0) cell.classList.add("fixed-col");
+        if (c===0) cell.classList.add("fixed-col");
 
-        if (r === 0) {
+        if (r===0){
           cell.classList.add("header-1");
-          cell.textContent = c > 0 ? val : "日付";
-        } else if (r === 1) {
+          cell.textContent = c>0 ? val : "日付";
+        } else if (r===1){
           cell.classList.add("header-2");
-          cell.innerHTML = c > 0 ? (['土','日'].includes(val) ? `<span class="red">${val}</span>` : val) : "曜日";
-        } else if (r === 2) {
-          cell.classList.add("header-3");
-          if (c === 0) cell.classList.add("fixed-col");
-          if (c > 0) {
-            cell.textContent = val;
-            cell.onclick = () => {
-              const states = ["●", "△", "NG", ""];
-              const idx = states.indexOf(cell.textContent);
-              cell.textContent = states[(idx + 1) % 4];
-            };
-          } else {
-            cell.textContent = "対応可能";
-          }
+          cell.innerHTML = c>0 ? (['土','日'].includes(val) ? `<span class="red">${val}</span>` : val) : "曜日";
         } else {
+          // データ行（クリックでR/Gハイライト切替）
           cell.textContent = val;
-          if (c > 0 && val !== "") {
-            cell.onclick = () => handleCellClick(r, c, cell);
-          }
+          if (c>0 && val!==""){ cell.onclick = () => handleCellClick(r, c, cell); }
         }
+
         fragment.appendChild(cell);
         row.push(cell);
       }
@@ -234,69 +127,58 @@
     hideLoading();
   }
 
-  function handleCellClick(rowIndex, colIndex, cell) {
-    const currentState = cell.classList.contains("highlight-red")
-      ? "red"
-      : cell.classList.contains("highlight-gray")
-      ? "gray"
-      : "none";
+  function handleCellClick(rowIndex, colIndex, cell){
+    const currentState = cell.classList.contains("highlight-red") ? "red" :
+                         cell.classList.contains("highlight-gray") ? "gray" : "none";
+    const columnHasRed = cellRefs.some((row, r) => r>=2 && row[colIndex].classList.contains("highlight-red"));
 
-    const columnHasRed = cellRefs.some((row, r) => r >= 3 && row[colIndex].classList.contains("highlight-red"));
-
-    if (currentState === "red") {
-      cell.classList.remove("highlight-red");
-      cell.classList.add("highlight-gray");
-    } else if (currentState === "gray") {
+    if (currentState === "red"){
+      cell.classList.remove("highlight-red"); cell.classList.add("highlight-gray");
+    } else if (currentState === "gray"){
       cell.classList.remove("highlight-gray");
     } else {
-      if (!columnHasRed) {
-        cell.classList.add("highlight-red");
-      } else {
-        cell.classList.add("highlight-gray");
-      }
+      if (!columnHasRed){ cell.classList.add("highlight-red"); }
+      else { cell.classList.add("highlight-gray"); }
     }
   }
 
-  function applyHighlight() {
-    for (let r = 3; r < highlightData.length - 2; r++) {
-      const row = highlightData[r + 2]?.split(',') || [];
-      for (let c = 1; c < row.length; c++) {
+  // 出力CSVの2行（回答者/年月）を除いた「2 + r」行目を参照してハイライト適用
+  function applyHighlight(){
+    if (!highlightData.length) return;
+    for (let r=2; r<cellRefs.length; r++){
+      const line = highlightData[2 + r] || '';
+      const row = line.split(',');
+      for (let c=1; c<row.length && c<cellRefs[r].length; c++){
         if (row[c] === 'R') cellRefs[r][c].classList.add("highlight-red");
         else if (row[c] === 'G') cellRefs[r][c].classList.add("highlight-gray");
       }
     }
   }
 
-  function mergeInputAndOutput(inputLines, outputLines) {
+  // 旧出力があっても、表示は input_data の2ヘッダ（日付/曜日）＋以降データを使用
+  function mergeInputAndOutput(inputLines, outputLines){
+    highlightData = [...outputLines]; // ハイライトは出力に従う（ヘッダは常に input 基準）
     const merged = [];
-    highlightData = [...outputLines];
-
-    // 出力ファイルの2行目に「年月,year,month」がある前提
-    const ym = parseCSVLine(outputLines[1]);
-    year = ym[1];
-    month = ym[2];
-    targetDateSpan.textContent = `対象：${year}年${month}月`;
-
+    // input_data.txt 構成（「対応可能」行は削除済）:
+    // 0: 年月,YYYY,MM
+    // 1: 日付行
+    // 2: 曜日行
+    // 3以降: データ行
     merged[0] = inputLines[1];
     merged[1] = inputLines[2];
-    merged[2] = outputLines[4] || inputLines[3];
-    for (let r = 4; r < inputLines.length; r++) {
-      merged.push(inputLines[r]);
-    }
+    for (let r=3; r<inputLines.length; r++){ merged.push(inputLines[r]); }
     return merged;
   }
 
-  function loadDataForMember(member) {
+  function loadDataForMember(member){
     showLoading("処理中...");
     const prefix = `${member}_`;
     fetch(`${gasUrl}?action=list&folder=${folderKeyword}&prefix=${encodeURIComponent(prefix)}`)
       .then(res => res.json())
       .then(data => {
         const inputLines = allInputLines;
-
-        // 既存ファイルがあれば最新を開いてマージ（パスワード確認なし）
-        if (data.result === "success" && data.files.length > 0) {
-          const latest = data.files.sort((a, b) => b.localeCompare(a))[0];
+        if (data.result === "success" && data.files.length > 0){
+          const latest = data.files.sort((a,b)=> b.localeCompare(a))[0];
           fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(latest)}`)
             .then(res => res.text())
             .then(outputText => {
@@ -305,45 +187,27 @@
               loadGridFromData(merged);
               exportBtn.style.display = 'inline-block';
             })
-            .catch(err => {
-              showMessage("ファイル読み込みに失敗しました。\n" + err.message, 'error');
-              hideLoading();
-            });
-
-        // なければ新規（パスワード要求なし）
+            .catch(err => { showMessage("ファイル読み込みに失敗しました。\n"+err.message,'error'); hideLoading(); });
         } else {
-          const ym = parseCSVLine(inputLines[0]);
-          year = ym[1];
-          month = ym[2];
-          targetDateSpan.textContent = `対象：${year}年${month}月`;
-
-          const merged = [
-            inputLines[1],
-            inputLines[2],
-            inputLines[3],
-            ...inputLines.slice(4)
-          ];
+          // 新規：input_data の2ヘッダ＋データ行で表示
+          const merged = [ inputLines[1], inputLines[2], ...inputLines.slice(3) ];
           loadGridFromData(merged);
           exportBtn.style.display = 'inline-block';
         }
       })
-      .catch(err => {
-        showMessage("ファイルチェックに失敗しました。\n" + err.message, 'error');
-        hideLoading();
-      });
+      .catch(err => { showMessage("ファイルチェックに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
+  // 保存：メタ2行（回答者/年月）＋ グリッド全行（先頭2行は文字、以降はR/G）
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
-
-    // 出力CSV（パスワード列なし）
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
     const rowCount = cellRefs.length;
     const colCount = 32;
-    for (let r = 0; r < rowCount; r++) {
+    for (let r=0; r<rowCount; r++){
       const row = [];
-      for (let c = 0; c < colCount; c++) {
-        if (r < 3) {
+      for (let c=0; c<colCount; c++){
+        if (r < 2){
           row.push(cellRefs[r][c].textContent);
         } else {
           if (cellRefs[r][c].classList.contains("highlight-red")) row.push('R');
@@ -354,29 +218,21 @@
       csv += row.join(',') + '\n';
     }
 
-    // ★ ファイル名規則：[メンバ名]_[YYYYMM]シフト.txt
-    const member = userName;                 // そのまま使用（スペースも可）
-    const targetYm = `${year}${month}`;      // 例：202502
+    // ファイル名：[メンバ名]_[YYYYMM]シフト.txt（YYYYMMは input_data.txt の1行目から）
+    const member = userName;
+    const targetYm = `${year}${String(month).padStart(2,'0')}`;
     const filename = `${member}_${targetYm}シフト.txt`;
 
     fetch(`${gasUrl}?folder=${folderKeyword}&filename=${encodeURIComponent(filename)}`, {
-      method: 'POST',
-      body: csv,
-      headers: { 'Content-Type': 'text/plain' }
+      method:'POST', body:csv, headers:{ 'Content-Type':'text/plain' }
     })
     .then(res => res.json())
     .then(data => {
-      if (data.result === 'success') {
-        showMessage(`回答内容を保存しました！\nファイル名：${filename}`, 'success');
-      } else {
-        showMessage("保存エラー：" + data.message, 'error');
-      }
+      if (data.result === 'success'){ showMessage(`回答内容を保存しました！\nファイル名：${filename}`, 'success'); }
+      else { showMessage("保存エラー：" + data.message, 'error'); }
       hideLoading();
     })
-    .catch(err => {
-      showMessage("通信エラー：" + err.message, 'error');
-      hideLoading();
-    });
+    .catch(err => { showMessage("通信エラー：" + err.message, 'error'); hideLoading(); });
   });
 
   window.onload = initAllData;
