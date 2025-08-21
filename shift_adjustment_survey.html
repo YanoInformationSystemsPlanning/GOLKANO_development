@@ -51,8 +51,13 @@
   const loadingText = document.getElementById("loadingText");
   const loadingSpinner = document.getElementById("loadingSpinner");
 
+  // ★GASエンドポイント＆フォルダキーワード
   const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
   const folderKeyword = "shift_adjustment_survey";
+
+  // ★ファイル名末尾（新旧両対応：読みは両方試す／保存は新名称）
+  const FILE_SUFFIX_NEW = "シフト希望";
+  const FILE_SUFFIX_OLD = "シフト";
 
   let allInputLines = [];
   let cellRefs = [];
@@ -124,7 +129,7 @@
     hideLoading();
   }
 
-  // クリック：赤⇔なし（灰色は廃止）
+  // クリック：赤⇔なし
   function handleCellClick(rowIndex, colIndex, cell){
     if (cell.classList.contains("highlight-red")){
       cell.classList.remove("highlight-red");
@@ -133,7 +138,7 @@
     }
   }
 
-  // 読み込み：値が "1" のセルだけ赤にする（旧R/G互換なし）
+  // 読み込み：値が "1" のセルだけ赤にする
   function applyHighlight(){
     if (!highlightData.length) return;
     // highlightData[0]: 回答者,xxx
@@ -150,7 +155,7 @@
     }
   }
 
-  // input_data のヘッダ2行（「日付」「曜日」）＋データ行をベースに表示
+  // input_data のヘッダ2行＋データ行をベースに表示
   function mergeInputAndOutput(inputLines, outputLines){
     highlightData = [...outputLines]; // ハイライトは出力準拠
     const merged = [];
@@ -165,21 +170,27 @@
     return merged;
   }
 
-  // 既存：完全一致 [メンバ名]_[YYYYMM]シフト.txt があれば編集、無ければ新規
+  // 既存：完全一致 [メンバ名]_[YYYYMM]シフト希望.txt があれば編集、無ければ旧名や新規
   function loadDataForMember(member){
     showLoading("処理中...");
     const prefix = `${member}_`;
-    const exactName = `${member}_${targetYm}シフト.txt`;
+    const exactNameNew = `${member}_${targetYm}${FILE_SUFFIX_NEW}.txt`;
+    const exactNameOld = `${member}_${targetYm}${FILE_SUFFIX_OLD}.txt`;
 
     fetch(`${gasUrl}?action=list&folder=${folderKeyword}&prefix=${encodeURIComponent(prefix)}`)
       .then(res => res.json())
       .then(data => {
         const inputLines = allInputLines;
-        const hasExact = (data.result === "success") && Array.isArray(data.files) && data.files.includes(exactName);
+        const files = (data.result === "success" && Array.isArray(data.files)) ? data.files : [];
 
-        if (hasExact){
+        // 新名称 → 旧名称の順で探索（後方互換）
+        const pickName = files.includes(exactNameNew) ? exactNameNew
+                        : files.includes(exactNameOld) ? exactNameOld
+                        : null;
+
+        if (pickName){
           // 既存（編集モード）
-          fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(exactName)}`)
+          fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(pickName)}`)
             .then(res => res.text())
             .then(outputText => {
               const outputLines = outputText.split('\n').filter(l => l.trim());
@@ -217,16 +228,23 @@
       csv += row.join(',') + '\n';
     }
 
-    // ファイル名：[メンバ名]_[YYYYMM]シフト.txt（YYYYMMは input_data.txt から）
-    const filename = `${userName}_${targetYm}シフト.txt`;
+    // ファイル名：[メンバ名]_[YYYYMM]シフト希望.txt（保存は新名称のみ）
+    const filename = `${userName}_${targetYm}${FILE_SUFFIX_NEW}.txt`;
 
-    fetch(`${gasUrl}?folder=${folderKeyword}&filename=${encodeURIComponent(filename)}`, {
+    // 岩垣仕様：action=overwrite（存在すれば上書き／無ければ新規作成）
+    fetch(`${gasUrl}?action=overwrite&folder=${folderKeyword}&filename=${encodeURIComponent(filename)}`, {
       method:'POST', body:csv, headers:{ 'Content-Type':'text/plain' }
     })
     .then(res => res.json())
     .then(data => {
-      if (data.result === 'success'){ showMessage(`回答内容を保存しました！\nファイル名：${filename}`, 'success'); }
-      else { showMessage("保存エラー：" + data.message, 'error'); }
+      if (data.result === 'success'){
+        const op    = data.operation || 'create';
+        const made  = data.created === true ? '（新規作成）' : (data.created === false ? '（上書き）' : '');
+        const hits  = (typeof data.matched === 'number') ? `\n同名ヒット数：${data.matched}` : '';
+        showMessage(`保存しました！\nファイル名：${filename}\n処理：${op}${made}${hits}`, 'success');
+      } else {
+        showMessage("保存エラー：" + data.message, 'error');
+      }
       hideLoading();
     })
     .catch(err => { showMessage("通信エラー：" + err.message, 'error'); hideLoading(); });
