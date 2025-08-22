@@ -56,7 +56,7 @@
       ・IDは、先頭に gk、次の xx にイニシャル、最後の XXX に指示された数字 を入力します。<br />
       ・パスワードは、先頭に pw、以降はIDと同じ内容を入力します。<br />
       ・認証情報は <code>id_pw_list.txt</code>（形式：<code>氏名,ID,PW,権限</code>）から読み込みます。<br />
-      ・権限は <code>admin</code> または <code>regular</code>。未指定時は <code>regular</code> として扱います。<br />
+      ・権限は <code>admin</code> または <code>user</code>。未指定時は <code>user</code> として扱います。<br />
       ・ログイン成功後、<code>top_menu.html</code> に遷移します。
     </div>
   </div>
@@ -131,7 +131,7 @@
     }
 
     function toRole(roleRaw) {
-      return (roleRaw ? String(roleRaw).toLowerCase() : "regular");
+      return (roleRaw ? String(roleRaw).toLowerCase() : "user");
     }
 
     async function handleLogin() {
