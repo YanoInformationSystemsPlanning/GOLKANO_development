@@ -63,13 +63,13 @@
       const area = document.getElementById("menuArea");
       if (role === "admin") {
         area.innerHTML = `
-          <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト調整</button>
+          <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト希望</button>
           <button class="menu-button" onclick="location.href='shift_aggregate.html'">シフト希望集約</button>
           <button class="menu-button admin-button" onclick="location.href='ranking_tool.html'">優先順位決め</button>
         `;
       } else {
         area.innerHTML = `
-          <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト調整</button>
+          <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト希望</button>
         `;
       }
     })();
@@ -77,4 +77,5 @@
   <script src="reload.js?v=20250724"></script>
 </body>
 </html>
+
 
