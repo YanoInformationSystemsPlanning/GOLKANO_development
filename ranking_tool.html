@@ -59,7 +59,7 @@
 <body>
   <button onclick="location.href='top_menu.html'">トップに戻る</button>
 
-  <div id="version-label">Ver.20250822a</div>
+  <div id="version-label">Ver.20250822b</div>
   <div id="content-wrapper">
     <div id="purpose-area">
       <label for="purpose-input"><strong>目的：</strong></label>
@@ -68,7 +68,7 @@
        placeholder="入力例：mm/dd コース名 キャンセル対象者抽選">
     </div>
 
-    <h2>候補者一覧</h2>
+    <h2>候補者一覧（五十音順）</h2>
     <div id="select-area">
       <div class="loading-status">
         <span>読み込み中...</span>
@@ -81,76 +81,65 @@
   </div>
 
   <script>
-    // ===== 取得元を index.html と同様の設計に統一 =====
-    // index.html: GAS 経由で master_data/id_pw_list.txt（CSV: 氏名,ID,PW,権限）を取得する実装。:contentReference[oaicite:3]{index=3}
+    // ===== データ取得設定 =====
     const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
     const MASTER_FOLDER = "master_data";
     const IDPW_FILE = "id_pw_list.txt";
 
+    // 候補者リスト（{name, yomi} の配列）
     let CANDIDATES = [];
 
     // 起動時に候補者を1回だけ取得
     async function initCandidates() {
-      console.time("initCandidates_total");
       const area = document.getElementById("select-area");
-
       try {
-        // master_data/id_pw_list.txt を取得（text/plain 想定）
         const url = `${GAS_URL}?action=read&folder=${encodeURIComponent(MASTER_FOLDER)}&file=${encodeURIComponent(IDPW_FILE)}`;
-        console.time("fetch_idpw");
         const response = await fetch(url, { cache: "no-store" });
-        console.timeEnd("fetch_idpw");
-
         if (!response.ok) throw new Error(`HTTPエラー ${response.status}`);
-
-        console.time("response_text");
         const text = await response.text();
-        console.timeEnd("response_text");
 
-        // 各行は「氏名,ID,PW,権限」。先頭カラム（氏名）だけを候補に採用。:contentReference[oaicite:4]{index=4}
-        console.time("parse_candidates_from_idpw");
+        // id_pw_list.txt は「氏名,ID,PW,権限,よみがな」形式を想定
         CANDIDATES = text
           .split(/\r?\n/)
           .map(l => l.trim())
-          .filter(l => l && !l.startsWith("#") && l.includes(",")) // 空行・コメント除外
-          .map(l => l.split(",")[0]?.trim())
-          .filter(name => !!name);
-        console.timeEnd("parse_candidates_from_idpw");
+          .filter(l => l && !l.startsWith("#") && l.includes(","))
+          .map(l => {
+            const cols = l.split(",");
+            return {
+              name: cols[0]?.trim(),
+              yomi: cols[4]?.trim() || cols[0]?.trim() // 読み仮名がなければ氏名を代用
+            };
+          })
+          .filter(obj => !!obj.name);
 
-        // 旧仕様（ranking_tool/input_data.txt の1行カンマ区切り）からの移行点。参照のみ。:contentReference[oaicite:5]{index=5}
+        // 読み仮名でソート（五十音順）
+        const collator = new Intl.Collator("ja");
+        CANDIDATES.sort((a, b) => collator.compare(a.yomi, b.yomi));
 
-        console.time("renderCandidates");
         renderCandidates();
-        console.timeEnd("renderCandidates");
-
       } catch (e) {
         area.innerHTML = `<span style="color:red;">データ取得エラー: ${e.message}</span>`;
       }
-
-      console.timeEnd("initCandidates_total");
     }
 
     // 候補者ボタンを生成
     function renderCandidates() {
-      console.time("renderCandidates_DOM");
       const area = document.getElementById("select-area");
       area.innerHTML = '';
       const fragment = document.createDocumentFragment();
-      CANDIDATES.forEach(name => {
+      CANDIDATES.forEach(obj => {
         const btn = document.createElement("button");
-        btn.textContent = name;
+        btn.textContent = obj.name;
         btn.className = "select-btn";
-        if (name.length > 4) btn.classList.add("small-text");
+        if (obj.name.length > 4) btn.classList.add("small-text");
         btn.onclick = () => btn.classList.toggle("selected");
         fragment.appendChild(btn);
       });
       area.appendChild(fragment);
-      console.timeEnd("renderCandidates_DOM");
     }
 
     // 「順位決め」クリック処理
     function generateRanking() {
-      console.time("generateRanking_total");
       const resultArea = document.getElementById("result-area");
       const rankBtn = document.getElementById("rank-button");
 
@@ -165,18 +154,16 @@
       setTimeout(() => {
         showRankingResult();
         rankBtn.disabled = false;
-        console.timeEnd("generateRanking_total");
       }, 3000);
     }
 
     // 結果表示
     function showRankingResult() {
-      console.time("showRankingResult");
       const selected = Array.from(document.getElementsByClassName("select-btn"))
         .filter(btn => btn.classList.contains("selected"))
         .map(btn => btn.textContent);
 
-      const ordered = CANDIDATES.filter(name => selected.includes(name));
+      const ordered = CANDIDATES.filter(obj => selected.includes(obj.name)).map(obj => obj.name);
       const shuffled = shuffle([...ordered]);
       const purpose = document.getElementById("purpose-input").value.trim();
       const resultArea = document.getElementById("result-area");
@@ -191,9 +178,9 @@
       const now = new Date();
       const formatted = `${now.getFullYear()}年${String(now.getMonth()+1).padStart(2,'0')}月${String(now.getDate()).padStart(2,'0')}日 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
       resultArea.innerHTML += `<div style="margin-top:0.5em; font-size:1em;">実施：${formatted}</div>`;
-      console.timeEnd("showRankingResult");
     }
 
+    // シャッフル関数
     function shuffle(array) {
       for (let i = array.length - 1; i > 0; i--) {
         const r = Math.floor(Math.random() * (i + 1));
@@ -203,19 +190,15 @@
     }
 
     function adjustContentMargin() {
-      console.time("adjustContentMargin");
       const version = document.getElementById('version-label');
       const wrapper = document.getElementById('content-wrapper');
       const height = version.offsetHeight;
       wrapper.style.marginTop = (height * 1.2) + 'px';
-      console.timeEnd("adjustContentMargin");
     }
 
     window.onload = function() {
-      console.time("window_onload");
       initCandidates();
       adjustContentMargin();
-      console.timeEnd("window_onload");
     };
   </script>
   <script src="reload.js?v=20250724"></script>
