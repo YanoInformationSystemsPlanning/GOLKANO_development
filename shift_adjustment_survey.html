@@ -36,7 +36,7 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250822</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250822-COURSEHEAD</div>
   <div id="messageBox"></div>
 
 <script>
@@ -51,18 +51,18 @@
   const loadingText = document.getElementById("loadingText");
   const loadingSpinner = document.getElementById("loadingSpinner");
 
-  // ★GASエンドポイント＆フォルダキーワード
+  // GASエンドポイント & フォルダキーワード
   const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
   const folderKeyword = "shift_adjustment_survey";
 
-  // ★ファイル名末尾（新ルール：シフト希望のみ）
+  // 出力ファイル名末尾（固定）
   const FILE_SUFFIX = "シフト希望";
 
   let allInputLines = [];
   let cellRefs = [];
-  let year = '';      // input_data.txt 1行目から取得
+  let year = '';
   let month = '';
-  let targetYm = '';  // YYYYMM
+  let targetYm = '';
   let highlightData = [];
 
   const userName = localStorage.getItem("userName") || "未設定";
@@ -82,7 +82,7 @@
       .then(res => res.text())
       .then(text => {
         allInputLines = text.split('\n').filter(l => l.trim());
-        const ym = parseCSVLine(allInputLines[0]); // 例: 年月,2025,07
+        const ym = parseCSVLine(allInputLines[0]); // 例: 年月,2025,08
         year  = ym[1];
         month = ym[2];
         targetYm = `${year}${String(month).padStart(2,'0')}`;
@@ -114,7 +114,6 @@
           cell.classList.add("header-2");
           cell.innerHTML = c>0 ? (['土','日'].includes(val) ? `<span class="red">${val}</span>` : val) : "曜日";
         } else {
-          // データ行（クリックで赤⇔なし）
           cell.textContent = val;
           if (c>0 && val!==""){ cell.onclick = () => handleCellClick(r, c, cell); }
         }
@@ -154,15 +153,15 @@
     }
   }
 
-  // input_data のヘッダ2行＋データ行をベースに表示
+  // input_data のヘッダ2行＋データ行をベースに表示（既存CSV側の先頭コース名は無視）
   function mergeInputAndOutput(inputLines, outputLines){
-    highlightData = [...outputLines]; // ハイライトは出力準拠
+    highlightData = [...outputLines]; // ハイライトは出力準拠（"1"のみを参照）
     const merged = [];
     // input_data.txt 構成：
     // 0: 年月,YYYY,MM
     // 1: 日付行
     // 2: 曜日行
-    // 3以降: データ行
+    // 3以降: データ行（先頭セル=コース名）
     merged[0] = inputLines[1];
     merged[1] = inputLines[2];
     for (let r=3; r<inputLines.length; r++){ merged.push(inputLines[r]); }
@@ -183,7 +182,6 @@
         const hasExact = files.includes(exactName);
 
         if (hasExact){
-          // 既存（編集モード）
           fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(exactName)}`)
             .then(res => res.text())
             .then(outputText => {
@@ -194,7 +192,6 @@
             })
             .catch(err => { showMessage("ファイル読み込みに失敗しました。\n"+err.message,'error'); hideLoading(); });
         } else {
-          // 新規（input_data ベース）
           const merged = [ inputLines[1], inputLines[2], ...inputLines.slice(3) ];
           loadGridFromData(merged);
           exportBtn.style.display = 'inline-block';
@@ -203,7 +200,7 @@
       .catch(err => { showMessage("ファイルチェックに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
-  // 保存：ヘッダ2行は文字、データ行は赤=1／それ以外=空
+  // 保存：ヘッダ2行は文字、データ行は赤=1／それ以外=空（先頭列はコース名）
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
@@ -214,9 +211,14 @@
       const row = [];
       for (let c=0; c<colCount; c++){
         if (r < 2){
-          row.push(cellRefs[r][c].textContent);
+          row.push(cellRefs[r][c]?.textContent ?? '');
         } else {
-          row.push(cellRefs[r][c].classList.contains("highlight-red") ? '1' : '');
+          if (c === 0) {
+            // コース名を必ず出力（input_data.txt由来の見出しセル）
+            row.push(cellRefs[r][0]?.textContent ?? '');
+          } else {
+            row.push(cellRefs[r][c]?.classList.contains("highlight-red") ? '1' : '');
+          }
         }
       }
       csv += row.join(',') + '\n';
