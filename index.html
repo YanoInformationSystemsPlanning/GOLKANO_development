@@ -1,176 +1,170 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Cache-Control" content="no-store" />
+  <meta charset="UTF-8" />
   <title>GOLKANO ログイン</title>
-
-  <!-- PWA関連 -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="GOLKANO">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store" />
   <style>
-    body {
-      font-family: sans-serif;
-      background-color: #f5f5f5;
-      margin: 0;
-      padding: 0;
-      text-align: center;
+    :root { --fg:#222; --muted:#666; --primary:#2b7cff; --danger:#d9534f; --ok:#28a745; }
+    html,body { margin:0; padding:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, "ヒラギノ角ゴ ProN", "メイリオ", sans-serif; background:#f7f7f7; color:var(--fg); }
+    .wrap { max-width:420px; margin:6vh auto 10vh; background:#fff; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.08); padding:28px 24px; }
+    h1 { margin:0 0 14px; font-size:22px; }
+    .sub { color:var(--muted); font-size:13px; margin-bottom:18px; }
+    label { font-size:13px; color:#333; display:block; margin:14px 0 6px; }
+    input[type="text"], input[type="password"] {
+      width:100%; box-sizing:border-box; padding:12px 12px; border:1px solid #ccc; border-radius:8px; font-size:16px;
+      outline:none; transition:.15s border-color;
     }
-    .version-label {
-      position: fixed;
-      top: 5px;
-      left: 10px;
-      font-size: 14px;
-      color: #555;
-      font-weight: bold;
+    input:focus { border-color:var(--primary); }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px; }
+    .btn {
+      display:inline-block; width:100%; padding:12px 14px; border:none; border-radius:8px; font-size:16px; cursor:pointer;
+      background:var(--primary); color:#fff; transition:.15s transform, .15s opacity;
     }
-    .header-area {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-top: 40px;
-      gap: 10px;
-      padding: 0 10px;
-      flex-wrap: nowrap;
-    }
-    .logo {
-      height: 1.5em;
-      width: auto;
-      flex-shrink: 0;
-    }
-    @media (max-width: 480px) {
-      .logo {
-        height: 1.2em;
-      }
-    }
-    .login-container {
-      background-color: white;
-      padding: 20px 30px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      margin: 20px auto;
-      text-align: center;
-      width: 300px;
-    }
-    input {
-      width: 100%;
-      padding: 10px;
-      margin: 5px 0;
-      font-size: 1em;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
-      font-size: 1em;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #45a049;
-    }
-    #loginError {
-      color: red;
-      margin-top: 10px;
-      display: none;
-    }
-    #errorOkButton {
-      margin-top: 10px;
-      background-color: #d9534f;
-    }
-    #loginTitle {
-      font-size: 1.5em;
-      font-weight: bold;
-      line-height: 1.5em;
-    }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .muted { color:var(--muted); font-size:12px; margin-top:10px; }
+    .msg { margin-top:12px; padding:10px 12px; border-radius:8px; font-size:14px; display:none; white-space:pre-line; }
+    .msg.error { display:block; background:#fdecea; color:#8a1f11; border:1px solid #f5c2c0; }
+    .msg.ok { display:block; background:#e7f6ec; color:#0f5132; border:1px solid #badbcc; }
+    .loading { display:none; align-items:center; gap:8px; color:var(--muted); font-size:13px; margin-top:10px; }
+    .spinner { width:14px; height:14px; border-radius:50%; border:3px solid #eaeaea; border-top:3px solid var(--primary); animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ver { position:fixed; left:10px; top:8px; font-size:12px; color:#555; }
   </style>
 </head>
 <body>
-  <div class="version-label">Ver.0 Rev.724</div>
-  <div class="header-area">
-    <img src="GOLKANO.ロゴ.png" alt="GOLKANO ロゴ" class="logo">
-    <div id="loginTitle">ログイン</div>
-  </div>
+  <div class="ver">index.html / Ver.2025-08-22</div>
+  <div class="wrap">
+    <h1>GOLKANO ログイン</h1>
+    <div class="sub">IDとパスワードを入力してください。</div>
 
-  <div class="login-container">
-    <input type="text" id="inputId" placeholder="ID">
-    <input type="password" id="inputPw" placeholder="パスワード">
-    <button id="loginBtn" onclick="checkCredentials()">ログイン</button>
-    <div id="loginError"></div>
+    <label for="inputId">ID</label>
+    <input id="inputId" type="text" inputmode="latin" autocomplete="username" placeholder="例: gkmm631" />
+
+    <label for="inputPw">パスワード</label>
+    <input id="inputPw" type="password" autocomplete="current-password" placeholder="••••••••" />
+
+    <div class="row">
+      <button id="loginBtn" class="btn">ログイン</button>
+    </div>
+
+    <div id="loading" class="loading"><span class="spinner"></span><span>認証ファイルを取得中…</span></div>
+    <div id="msg" class="msg"></div>
+
+    <div class="muted">
+      ・認証情報は <code>id_pw_list.txt</code>（形式：<code>氏名,ID,PW,権限</code>）から読み込みます。<br />
+      ・権限は <code>admin</code> または <code>regular</code>。未指定時は <code>regular</code> として扱います。<br />
+      ・ログイン成功後、<code>top_menu.html</code> に遷移します。
+    </div>
   </div>
 
   <script>
-    const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
-    const folderKeyword = "master_data";
-    const fileName = "id_pw_list.txt";
-    let idPwPairs = [];
+    // ===== 設定（環境に合わせて調整） =====
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
+    const MASTER_FOLDER = "master_data";
+    const IDPW_FILE = "id_pw_list.txt";
 
-    async function preloadIdPwList() {
+    // ===== 要素参照 =====
+    const $id = document.getElementById("inputId");
+    const $pw = document.getElementById("inputPw");
+    const $btn = document.getElementById("loginBtn");
+    const $msg = document.getElementById("msg");
+    const $loading = document.getElementById("loading");
+
+    let idPwRecords = []; // [name, id, pw, role]
+
+    function showMsg(text, kind = "error") {
+      $msg.className = `msg ${kind}`;
+      $msg.textContent = text;
+      $msg.style.display = "block";
+    }
+    function clearMsg() {
+      $msg.style.display = "none";
+      $msg.textContent = "";
+    }
+    function setLoading(on) {
+      $loading.style.display = on ? "flex" : "none";
+      $btn.disabled = on;
+      $id.disabled = on;
+      $pw.disabled = on;
+    }
+
+    async function loadIdPwList() {
+      setLoading(true);
       try {
-        const url = `${gasUrl}?action=read&folder=${folderKeyword}&file=${fileName}`;
-        const res = await fetch(url);
+        // id_pw_list.txt を GAS 経由で取得（text/plain）
+        const url = `${GAS_URL}?action=read&folder=${encodeURIComponent(MASTER_FOLDER)}&file=${encodeURIComponent(IDPW_FILE)}`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
-        idPwPairs = text.split(/\r?\n/)
-                        .filter(line => line.includes(','))
-                        .map(line => line.split(',').map(s => s.trim()));
-      } catch (e) {
-        console.error("ID/PWリストの取得に失敗:", e);
+
+        // 行を解析：name,id,pw,role
+        idPwRecords = text
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .filter(l => l && !l.startsWith("#") && l.includes(","))
+          .map(l => l.split(",").map(s => s.trim()));
+
+      } catch (err) {
+        showMsg(`認証ファイルの取得に失敗しました。\n${err.message}`, "error");
+      } finally {
+        setLoading(false);
       }
     }
 
-    function disableInputs(disable) {
-      document.getElementById("inputId").disabled = disable;
-      document.getElementById("inputPw").disabled = disable;
-      document.getElementById("loginBtn").disabled = disable;
+    function validateInput() {
+      const id = $id.value.trim();
+      const pw = $pw.value.trim();
+      if (!id || !pw) {
+        showMsg("ID と PW を入力してください。", "error");
+        return null;
+      }
+      return { id, pw };
     }
 
-    function showError(msg) {
-      const loginError = document.getElementById("loginError");
-      loginError.innerHTML = msg + "<br><button id='errorOkButton' onclick='resetError()'>OK</button>";
-      loginError.style.display = "block";
-      disableInputs(true);
+    function findUser(id, pw) {
+      // CSV: name,id,pw,role
+      return idPwRecords.find(([name, cid, cpw]) => cid === id && cpw === pw);
     }
 
-    function resetError() {
-      const loginError = document.getElementById("loginError");
-      loginError.style.display = "none";
-      document.getElementById("inputId").value = "";
-      document.getElementById("inputPw").value = "";
-      disableInputs(false);
-      document.getElementById("inputId").focus();
+    function toRole(roleRaw) {
+      return (roleRaw ? String(roleRaw).toLowerCase() : "regular");
     }
 
-    function checkCredentials() {
-      const inputId = document.getElementById("inputId").value.trim();
-      const inputPw = document.getElementById("inputPw").value.trim();
+    async function handleLogin() {
+      clearMsg();
+      const v = validateInput();
+      if (!v) return;
 
-      if (!inputId || !inputPw) {
-        showError("IDとPWを入力してください。");
+      const match = findUser(v.id, v.pw);
+      if (!match) {
+        showMsg("ID または PW が正しくありません。", "error");
         return;
       }
 
-      const match = idPwPairs.find(([name, id, pw]) => id === inputId && pw === inputPw);
+      const [userName, userId, _pw, roleRaw] = match;
+      const userRole = toRole(roleRaw);
 
-      if (match) {
-        const userName = match[0];
-        localStorage.setItem("userName", userName);
-        window.location.href = "top_menu.html";
-      } else {
-        showError("ID or PW が正しくありません。再入力してください。");
-      }
+      // ローカル保存（top_menu.html で参照）
+      localStorage.setItem("userName", userName);
+      localStorage.setItem("userId", userId);
+      localStorage.setItem("userRole", userRole);
+
+      showMsg(`ログイン成功：${userName}（${userRole}）`, "ok");
+      // 少し待ってから遷移（表示確認用）
+      setTimeout(() => { window.location.href = "top_menu.html"; }, 300);
     }
 
-    window.onload = preloadIdPwList;
+    // ===== 初期化 =====
+    window.addEventListener("load", () => {
+      loadIdPwList();
+
+      // Enter でログイン
+      $id.addEventListener("keydown", (e) => { if (e.key === "Enter") $pw.focus(); });
+      $pw.addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
+      $btn.addEventListener("click", handleLogin);
+    });
   </script>
   <script src="reload.js?v=20250724"></script>
 </body>
