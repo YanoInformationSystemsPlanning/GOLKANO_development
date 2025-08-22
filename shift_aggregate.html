@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>シフト希望集約</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <style>
+    :root { --fg:#222; --muted:#666; --ok:#28a745; --error:#d9534f; --primary:#2b7cff; }
+    html,body { margin:0; padding:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, "ヒラギノ角ゴ ProN", "メイリオ", sans-serif; background:#f7f7f7; color:var(--fg); }
+    header { display:flex; align-items:center; gap:10px; padding:10px; background:#f0f0f0; border-bottom:1px solid #ddd; }
+    header h1 { font-size:18px; margin:0; }
+    main { max-width:980px; margin:18px auto 48px; padding:0 12px; }
+    .card { background:#fff; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.06); padding:16px; }
+    .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .btn {
+      appearance:none; border:none; border-radius:8px; padding:10px 14px; font-size:15px; color:#fff; background:var(--primary);
+      cursor:pointer;
+    }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#eee; color:#333; }
+    #log { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; white-space:pre-wrap; font-size:12px; color:#333; margin-top:10px; }
+    .msg { margin-top:12px; padding:10px 12px; border-radius:8px; font-size:14px; display:none; }
+    .msg.ok { display:block; background:#e7f6ec; color:#0f5132; border:1px solid #badbcc; }
+    .msg.error { display:block; background:#fdecea; color:#842029; border:1px solid #f5c2c0; }
+    .spinner { width:14px; height:14px; border-radius:50%; border:3px solid #eaeaea; border-top:3px solid var(--primary); animation:spin 1s linear infinite; display:inline-block; vertical-align:-2px; margin-right:6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ver { position:fixed; left:10px; top:8px; font-size:12px; color:#555; }
+    .note { font-size:12px; color:#555; margin-top:8px; }
+    .list { margin-top:10px; font-size:13px; }
+    .list code { background:#f4f4f4; padding:1px 6px; border-radius:6px; }
+    .muted { color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="ver">shift_aggregate.html / Ver.2025-08-22</div>
+  <header>
+    <button class="btn" onclick="location.href='top_menu.html'">← メニューに戻る</button>
+    <h1>シフト希望集約</h1>
+    <span id="userInfo" class="pill"></span>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="row">
+        <button id="runBtn" class="btn">集約を実行</button>
+        <span id="status" class="muted">準備完了</span>
+      </div>
+      <div id="msg" class="msg"></div>
+      <div class="list" id="fileInfo"></div>
+      <div id="log"></div>
+      <div class="note">
+        ・<code>shift_adjustment_survey</code> フォルダ直下の <code>*_YYYYMMシフト希望.txt</code> を対象にします。<br/>
+        ・対象月（YYYYMM）が混在している場合はエラーで停止します。<br/>
+        ・出力は <code>シフト希望集約_YYYYMM.csv</code>（上書き／無ければ新規）です。
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ===== 設定 =====
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
+    const FOLDER = "shift_adjustment_survey";
+
+    // ===== 要素参照 =====
+    const $run = document.getElementById("runBtn");
+    const $status = document.getElementById("status");
+    const $log = document.getElementById("log");
+    const $msg = document.getElementById("msg");
+    const $fileInfo = document.getElementById("fileInfo");
+    const $userInfo = document.getElementById("userInfo");
+
+    // ===== 共通UI =====
+    function setBusy(on, text) {
+      $run.disabled = on;
+      $status.innerHTML = on ? `<span class="spinner"></span>${text || "処理中…"}` : (text || "準備完了");
+    }
+    function info(text) {
+      $msg.className = "msg ok"; $msg.textContent = text; $msg.style.display = "block";
+    }
+    function err(text) {
+      $msg.className = "msg error"; $msg.textContent = text; $msg.style.display = "block";
+    }
+    function logln(text="") { $log.textContent += text + "\n"; }
+    function clearLog() { $log.textContent = ""; $msg.style.display = "none"; $msg.textContent = ""; }
+
+    // ===== ログイン表示（任意） =====
+    (function initUser(){
+      const name = localStorage.getItem("userName") || "";
+      const role = (localStorage.getItem("userRole") || "").toLowerCase();
+      if (name) $userInfo.textContent = `${name}${role ? "（"+role+"）" : ""}`;
+    })();
+
+    // ===== Drive 一覧取得 → 対象抽出 =====
+    async function listShiftFiles() {
+      const url = `${GAS_URL}?action=list&folder=${encodeURIComponent(FOLDER)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`list 失敗: HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.result !== "success" || !Array.isArray(data.files)) {
+        throw new Error("list 形式エラー");
+      }
+      // *_YYYYMMシフト希望.txt を対象に
+      const rx = /_(\d{6})シフト希望\.txt$/;
+      const targets = data.files.filter(n => rx.test(n));
+      return { targets, rx };
+    }
+
+    // ===== YYYYMM 一致チェック =====
+    function checkUniformYm(files, rx) {
+      const ymSet = new Set();
+      files.forEach(n => {
+        const m = n.match(rx);
+        if (m) ymSet.add(m[1]);
+      });
+      if (ymSet.size !== 1) {
+        const list = [...ymSet].join(", ");
+        throw new Error(`処理対象ファイルの対象月情報が正しくない（検出: ${list || "なし"}）`);
+      }
+      return [...ymSet][0];
+    }
+
+    // ===== 1ファイルのテキスト取得 =====
+    async function fetchTextFile(name) {
+      const url = `${GAS_URL}?action=read&folder=${encodeURIComponent(FOLDER)}&file=${encodeURIComponent(name)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`read 失敗: ${name} / HTTP ${res.status}`);
+      return await res.text();
+    }
+
+    // ===== 1ファイル → 1行集約の生成 =====
+    function buildOneRow(yymm, filename, text) {
+      // テキストは:
+      // 0: 回答者,名前
+      // 1: 年月,YYYY,MM
+      // 2: 日付,1..31
+      // 3: 曜日,金..日
+      // 4以降: コース名,（1/空×日数）
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 5) throw new Error(`${filename}: 行数不足`);
+
+      const getNameFromHead = () => {
+        const a = lines[0].split(",");
+        return a.length >= 2 ? a[1] : null;
+      };
+      const nameFromHead = getNameFromHead();
+      const nameFromFile = filename.split("_")[0];
+      const member = nameFromHead || nameFromFile;
+
+      const row = [ yymm, member ];
+      for (let i = 4; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+        const course = (cols[0] || "").trim();
+        const rest = cols.slice(1).join(",");      // カンマを含む本文をそのまま1セルに
+        const quoted = `"${rest.replace(/"/g, '""')}"`; // CSVルール：ダブルクオートはエスケープ
+        row.push(course);
+        row.push(quoted);
+      }
+      return row.join(",");
+    }
+
+    // ===== すべて集約 → CSV テキスト化 =====
+    async function buildAggregateCsv(targets, yymm) {
+      const header = `シフト希望集約_${yymm}`;
+      const rows = [];
+      for (const name of targets) {
+        logln(`読込: ${name}`);
+        const text = await fetchTextFile(name);
+        rows.push(buildOneRow(yymm, name, text));
+      }
+      return header + "\n" + rows.join("\n") + "\n";
+    }
+
+    // ===== CSV を Drive に保存（上書き or 新規） =====
+    async function saveAggregateCsv(yymm, csvText) {
+      const outName = `シフト希望集約_${yymm}.csv`;
+      const url = `${GAS_URL}?action=overwrite&folder=${encodeURIComponent(FOLDER)}&filename=${encodeURIComponent(outName)}`;
+      const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"text/plain" }, body: csvText });
+      if (!res.ok) throw new Error(`保存失敗: HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.result !== "success") throw new Error(`保存エラー: ${data.message || "不明"}`);
+      return { outName, api:data };
+    }
+
+    // ===== 画面：対象一覧の表示 =====
+    function renderTargetList(files, yymm) {
+      if (!files.length) { $fileInfo.textContent = "対象ファイルはありません。"; return; }
+      const html = [
+        `<div><b>対象月:</b> ${yymm}</div>`,
+        `<div><b>対象ファイル (${files.length}件):</b></div>`,
+        "<ul style='margin:6px 0 0 18px;padding:0;'>",
+        ...files.map(n => `<li style="margin:2px 0;"><code>${n}</code></li>`),
+        "</ul>"
+      ].join("");
+      $fileInfo.innerHTML = html;
+    }
+
+    // ===== 実行ボタン =====
+    $run.addEventListener("click", async () => {
+      clearLog(); setBusy(true, "一覧取得中…");
+      try {
+        // 1) 一覧
+        const { targets, rx } = await listShiftFiles();
+        if (!targets.length) { err("処理対象（*_YYYYMMシフト希望.txt）が見つかりません。"); setBusy(false, "待機中"); return; }
+
+        // 2) YYYYMM 一致チェック
+        const yymm = checkUniformYm(targets, rx);
+        renderTargetList(targets, yymm);
+
+        // 3) 集約
+        setBusy(true, "集約中…");
+        const csvText = await buildAggregateCsv(targets, yymm);
+
+        // 4) 保存（上書き／なければ新規）
+        setBusy(true, "保存中…");
+        const { outName, api } = await saveAggregateCsv(yymm, csvText);
+
+        info(`完了：${outName}\n処理：${api.operation}${api.created===true?"（新規作成）":api.created===false?"（上書き）":""}`);
+        setBusy(false, "完了");
+      } catch (e) {
+        console.error(e);
+        err(e.message || "エラーが発生しました。");
+        setBusy(false, "待機中");
+      }
+    });
+  </script>
+  <script src="reload.js?v=20250724"></script>
+</body>
+</html>
