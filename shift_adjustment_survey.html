@@ -36,7 +36,7 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.0 Rev.732（PW撤去／対応可能行廃止／YYYYMM=input1行目／編集=完全一致のみ／赤=1保存）</div>
+  <div id="version-label" style="text-align:left; margin:10px;">V2 R0822</div>
   <div id="messageBox"></div>
 
 <script>
@@ -55,9 +55,8 @@
   const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
   const folderKeyword = "shift_adjustment_survey";
 
-  // ★ファイル名末尾（新旧両対応：読みは両方試す／保存は新名称）
-  const FILE_SUFFIX_NEW = "シフト希望";
-  const FILE_SUFFIX_OLD = "シフト";
+  // ★ファイル名末尾（新ルール：シフト希望のみ）
+  const FILE_SUFFIX = "シフト希望";
 
   let allInputLines = [];
   let cellRefs = [];
@@ -170,27 +169,22 @@
     return merged;
   }
 
-  // 既存：完全一致 [メンバ名]_[YYYYMM]シフト希望.txt があれば編集、無ければ旧名や新規
+  // 既存：完全一致 [メンバ名]_[YYYYMM]シフト希望.txt があれば編集、無ければ新規
   function loadDataForMember(member){
     showLoading("処理中...");
     const prefix = `${member}_`;
-    const exactNameNew = `${member}_${targetYm}${FILE_SUFFIX_NEW}.txt`;
-    const exactNameOld = `${member}_${targetYm}${FILE_SUFFIX_OLD}.txt`;
+    const exactName = `${member}_${targetYm}${FILE_SUFFIX}.txt`;
 
     fetch(`${gasUrl}?action=list&folder=${folderKeyword}&prefix=${encodeURIComponent(prefix)}`)
       .then(res => res.json())
       .then(data => {
         const inputLines = allInputLines;
         const files = (data.result === "success" && Array.isArray(data.files)) ? data.files : [];
+        const hasExact = files.includes(exactName);
 
-        // 新名称 → 旧名称の順で探索（後方互換）
-        const pickName = files.includes(exactNameNew) ? exactNameNew
-                        : files.includes(exactNameOld) ? exactNameOld
-                        : null;
-
-        if (pickName){
+        if (hasExact){
           // 既存（編集モード）
-          fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(pickName)}`)
+          fetch(`${gasUrl}?action=read&folder=${folderKeyword}&file=${encodeURIComponent(exactName)}`)
             .then(res => res.text())
             .then(outputText => {
               const outputLines = outputText.split('\n').filter(l => l.trim());
@@ -228,10 +222,10 @@
       csv += row.join(',') + '\n';
     }
 
-    // ファイル名：[メンバ名]_[YYYYMM]シフト希望.txt（保存は新名称のみ）
-    const filename = `${userName}_${targetYm}${FILE_SUFFIX_NEW}.txt`;
+    // ファイル名：[メンバ名]_[YYYYMM]シフト希望.txt
+    const filename = `${userName}_${targetYm}${FILE_SUFFIX}.txt`;
 
-    // 岩垣仕様：action=overwrite（存在すれば上書き／無ければ新規作成）
+    // 上書き/新規自動判定
     fetch(`${gasUrl}?action=overwrite&folder=${folderKeyword}&filename=${encodeURIComponent(filename)}`, {
       method:'POST', body:csv, headers:{ 'Content-Type':'text/plain' }
     })
