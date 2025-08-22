@@ -14,9 +14,7 @@
       font-size: 0.8em;
       color: #555;
     }
-    #content-wrapper {
-      margin-top: 1em; /* JSで動的に調整 */
-    }
+    #content-wrapper { margin-top: 1em; }
     h2 { margin-bottom: 0.5em; }
     #purpose-area { margin-bottom: 0.5em; }
     #select-area {
@@ -61,7 +59,7 @@
 <body>
   <button onclick="location.href='top_menu.html'">トップに戻る</button>
 
-  <div id="version-label">Ver.20250822</div>
+  <div id="version-label">Ver.20250822a</div>
   <div id="content-wrapper">
     <div id="purpose-area">
       <label for="purpose-input"><strong>目的：</strong></label>
@@ -83,10 +81,13 @@
   </div>
 
   <script>
+    // ===== 取得元を index.html と同様の設計に統一 =====
+    // index.html: GAS 経由で master_data/id_pw_list.txt（CSV: 氏名,ID,PW,権限）を取得する実装。:contentReference[oaicite:3]{index=3}
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
+    const MASTER_FOLDER = "master_data";
+    const IDPW_FILE = "id_pw_list.txt";
+
     let CANDIDATES = [];
-    const gasUrl = 'https://script.google.com/macros/s/AKfycbzi42o5RlvzGZcGGtlGl_7Fvds2Iqo_du2qT10W0BJkkdQgL1_m0ok20L5DS4y09CMF/exec';
-    const folderKeyword = 'ranking_tool';
-    const inputFile = 'input_data.txt';
 
     // 起動時に候補者を1回だけ取得
     async function initCandidates() {
@@ -94,10 +95,11 @@
       const area = document.getElementById("select-area");
 
       try {
-        const url = `${gasUrl}?action=read&folder=${folderKeyword}&file=${inputFile}`;
-        console.time("fetch_data");
-        const response = await fetch(url);
-        console.timeEnd("fetch_data");
+        // master_data/id_pw_list.txt を取得（text/plain 想定）
+        const url = `${GAS_URL}?action=read&folder=${encodeURIComponent(MASTER_FOLDER)}&file=${encodeURIComponent(IDPW_FILE)}`;
+        console.time("fetch_idpw");
+        const response = await fetch(url, { cache: "no-store" });
+        console.timeEnd("fetch_idpw");
 
         if (!response.ok) throw new Error(`HTTPエラー ${response.status}`);
 
@@ -105,12 +107,17 @@
         const text = await response.text();
         console.timeEnd("response_text");
 
-        console.time("parse_candidates");
-        const firstLine = text.split(/\r?\n/)[0];
-        CANDIDATES = firstLine.split(',').slice(1)
-          .map(name => name.trim())
-          .filter(name => name);
-        console.timeEnd("parse_candidates");
+        // 各行は「氏名,ID,PW,権限」。先頭カラム（氏名）だけを候補に採用。:contentReference[oaicite:4]{index=4}
+        console.time("parse_candidates_from_idpw");
+        CANDIDATES = text
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .filter(l => l && !l.startsWith("#") && l.includes(",")) // 空行・コメント除外
+          .map(l => l.split(",")[0]?.trim())
+          .filter(name => !!name);
+        console.timeEnd("parse_candidates_from_idpw");
+
+        // 旧仕様（ranking_tool/input_data.txt の1行カンマ区切り）からの移行点。参照のみ。:contentReference[oaicite:5]{index=5}
 
         console.time("renderCandidates");
         renderCandidates();
@@ -214,6 +221,3 @@
   <script src="reload.js?v=20250724"></script>
 </body>
 </html>
-
-
-
