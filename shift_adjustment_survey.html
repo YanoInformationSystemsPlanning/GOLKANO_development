@@ -13,6 +13,7 @@
     .spinner { border:3px solid #f3f3f3; border-top:3px solid red; border-radius:50%; width:14px; height:14px; animation:spin 1s linear infinite; display:none; }
     @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
 
+    /* 右端に「コースごとの備考」列（幅は入力欄で確保：48ch） */
     .grid { display:grid; grid-template-columns:110px repeat(31,36px) 48ch; grid-auto-rows:30px; min-width:max-content; -webkit-overflow-scrolling:touch; }
     .cell { border:1px solid #ccc; text-align:center; line-height:30px; white-space:nowrap; user-select:none; background:#fff; font-size:14px; overflow:hidden; }
 
@@ -43,7 +44,7 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824a</div>
   <div id="messageBox"></div>
 
 <script>
@@ -127,13 +128,15 @@
           }
         } else {
           if (c===32){
-            // ★ 備考欄を1.5倍幅に（size=75）
+            // コース名に応じて placeholder を「◯◯の備考」に設定
+            const courseName = data[r]?.[0] ? String(data[r][0]).trim() : "";
             const input = document.createElement("input");
             input.type = "text";
             input.className = "remark-input";
-            input.setAttribute("size","75");      // 50 → 75 に変更
-            input.setAttribute("maxlength","50"); // 入力可能文字数はそのまま
-            input.placeholder = "備考";
+            input.setAttribute("size","75");       // 1.5倍幅
+            input.setAttribute("maxlength","50");  // 入力可能文字数は据え置き
+            input.placeholder = courseName ? `${courseName}の備考` : "備考";
+            input.setAttribute("aria-label", courseName ? `${courseName}の備考` : "備考");
             cell.style.textAlign = "left";
             cell.appendChild(input);
             rowRemarkInputs.set(r, input);
