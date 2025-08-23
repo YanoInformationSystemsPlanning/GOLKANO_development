@@ -13,11 +13,11 @@
     .spinner { border:3px solid #f3f3f3; border-top:3px solid red; border-radius:50%; width:14px; height:14px; animation:spin 1s linear infinite; display:none; }
     @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
 
-    /* ★ 右端に「コースごとの備考」列（30ch）を追加 */
+    /* 右端に「コースごとの備考」列（幅は入力欄で確保） */
     .grid { display:grid; grid-template-columns:110px repeat(31,36px) 32ch; grid-auto-rows:30px; min-width:max-content; -webkit-overflow-scrolling:touch; }
 
     .cell { border:1px solid #ccc; text-align:center; line-height:30px; white-space:nowrap; user-select:none; background:#fff; font-size:14px; overflow:hidden; }
-    /* ★ スティッキーの段数を1段分繰り下げ（共通備考を最上段に） */
+    /* スティッキー：共通備考・日付・曜日の順 */
     .header-0 { position:sticky; top:0; background:#eee; z-index:7; }     /* 共通備考 */
     .header-1 { position:sticky; top:30px; background:#eee; z-index:6; }  /* 日付 */
     .header-2 { position:sticky; top:60px; background:#eee; z-index:5; }  /* 曜日 */
@@ -31,7 +31,7 @@
     #messageBox.show { opacity:1; }
     #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
 
-    /* ★ 入力欄の見た目を控えめに */
+    /* 入力欄の見た目を控えめに */
     .remark-input { width:100%; box-sizing:border-box; height:28px; border:1px solid #bbb; padding:0 6px; font-size:14px; }
     .remark-input::placeholder { color:#999; }
   </style>
@@ -64,19 +64,16 @@
 
   const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
   const folderKeyword = "shift_adjustment_survey";
-
   const FILE_SUFFIX = "シフト希望";
 
   let allInputLines = [];
   let cellRefs = [];
-  let year = '';
-  let month = '';
-  let targetYm = '';
+  let year = ''; let month = ''; let targetYm = '';
   let highlightData = [];
 
-  /* ★ 備考入力への参照 */
+  // 備考入力の参照
   let commonRemarkInput = null;
-  const rowRemarkInputs = new Map(); // key: 表示上の行index（共通備考・日付・曜日を含む）
+  const rowRemarkInputs = new Map(); // 表示行index → input要素
 
   const userName = localStorage.getItem("userName") || "未設定";
   memberNameSpan.textContent = userName;
@@ -95,8 +92,7 @@
       .then(text => {
         allInputLines = text.split('\n').filter(l => l.trim());
         const ym = parseCSVLine(allInputLines[0]); // 年月,YYYY,MM
-        year  = ym[1];
-        month = ym[2];
+        year  = ym[1]; month = ym[2];
         targetYm = `${year}${String(month).padStart(2,'0')}`;
         targetDateSpan.textContent = `対象：${year}年${month}月`;
         loadDataForMember(userName);
@@ -109,13 +105,11 @@
 
     const data = lines.map(parseCSVLine);
     const baseRowCount = data.length;
-
-    /* ★ 列数：日付31列 + 左の見出し1列 + 右端の備考1列 = 33 */
-    const colCount = 33;
+    const colCount = 33; // 日付31 + 左見出し + 右端備考
 
     const fragment = document.createDocumentFragment();
 
-    /* ★ 先頭に「共通備考」行（表示上の行index=0）を追加 */
+    // === 共通備考 行（最上段） ===
     {
       const row = [];
       for (let c=0; c<colCount; c++){
@@ -125,19 +119,18 @@
           cell.classList.add("fixed-col");
           cell.textContent = "共通備考";
         } else if (c===1){
-          // 右側全域に1セルで広げて入力欄を配置
           cell.style.gridColumn = "2 / span 32";
           cell.style.textAlign = "left";
           const input = document.createElement("input");
           input.type = "text";
           input.className = "remark-input";
-          input.setAttribute("size","50");     // 表示幅 50文字
-          input.setAttribute("maxlength","50");// 入力可能 50文字
+          input.setAttribute("size","50");      // 表示幅は現状のまま（50）
+          input.setAttribute("maxlength","100"); // ★ 入力可能100文字に変更
           input.placeholder = "（例）全体連絡事項などを記入";
           cell.appendChild(input);
           commonRemarkInput = input;
         } else {
-          cell.style.display = "none"; // グリッド上は1セルで占有するため残りは非表示
+          cell.style.display = "none";
         }
         fragment.appendChild(cell);
         row.push(cell);
@@ -145,17 +138,17 @@
       cellRefs.push(row);
     }
 
-    /* ★ 以降：元データの「日付」「曜日」「コース行」を順に描画 */
+    // === 以降：日付・曜日・データ行 ===
     for (let r=0; r<baseRowCount; r++){
       const row = [];
       for (let c=0; c<colCount; c++){
         const cell = document.createElement("div");
         cell.className = "cell";
 
-        const isDateRow   = (r===0);
-        const isWeekRow   = (r===1);
-        const isDataRow   = (r>=2);
-        const val = (c < 32) ? (data[r]?.[c] ?? '') : ''; // 右端の備考列（c=32）はデータ外
+        const isDateRow = (r===0);
+        const isWeekRow = (r===1);
+        const isDataRow = (r>=2);
+        const val = (c < 32) ? (data[r]?.[c] ?? '') : '';
 
         if (c===0) cell.classList.add("fixed-col");
 
@@ -165,27 +158,25 @@
         } else if (isWeekRow){
           cell.classList.add("header-2");
           if (c===32){
-            cell.textContent = "コースごとの備考"; // ★ ヘッダ表示
+            cell.textContent = "コースごとの備考";
           } else {
             cell.innerHTML = c>0 ? (['土','日'].includes(val) ? `<span class="red">${val}</span>` : val) : "曜日";
           }
         } else {
           if (c===32){
-            // ★ 各データ行の右端に入力欄（表示幅30文字、最大50）
+            // ★ 各行右端の備考：表示幅50、最大50
             const input = document.createElement("input");
             input.type = "text";
             input.className = "remark-input";
-            input.setAttribute("size","30");
-            input.setAttribute("maxlength","50");
+            input.setAttribute("size","50");      // ★ 50文字幅へ変更
+            input.setAttribute("maxlength","50"); // 文字数上限は従来通り
             input.placeholder = "備考";
             cell.style.textAlign = "left";
             cell.appendChild(input);
-            // 表示上の行index：共通備考(0) + 日付(1) + 曜日(1) を加味
-            const displayRowIndex = 1 /*共通備考*/ + r + 1; // r=0→2, r=1→3, r=2→4...
+            const displayRowIndex = 1 /*共通備考*/ + r + 1;
             rowRemarkInputs.set(displayRowIndex, input);
           } else {
             cell.textContent = val;
-            // クリックで赤トグルは日付・曜日以外＆日付列1..31のみ
             if (c>0 && c<32 && isDataRow && val!==""){ cell.onclick = () => handleCellClick(1 + r + 1, c, cell); }
           }
         }
@@ -208,12 +199,7 @@
 
   function applyHighlight(){
     if (!highlightData.length) return;
-    // highlightData[0]: 回答者,xxx
-    // highlightData[1]: 年月,YYYY,MM
-    // highlightData[2]以降：元ファイルの「日付行, 曜日行, データ行...」
-    // ★ 画面では先頭に共通備考行を1行追加しているため、表示行r=3以降がデータ行。
     for (let r=3; r<cellRefs.length; r++){
-      // highlightData側の対応行は 2 + (r-1) = r+1
       const line = highlightData[r+1] || '';
       const row = line.split(',');
       for (let c=1; c<=31 && c<cellRefs[r].length; c++){
@@ -223,13 +209,8 @@
   }
 
   function mergeInputAndOutput(inputLines, outputLines){
-    highlightData = [...outputLines]; // "1" だけを参照
+    highlightData = [...outputLines];
     const merged = [];
-    // input_data.txt 構成：
-    // 0: 年月,YYYY,MM
-    // 1: 日付行
-    // 2: 曜日行
-    // 3以降: データ行（先頭セル=コース名）
     merged[0] = inputLines[1];  // 日付
     merged[1] = inputLines[2];  // 曜日
     for (let r=3; r<inputLines.length; r++){ merged.push(inputLines[r]); }
@@ -267,28 +248,24 @@
       .catch(err => { showMessage("ファイルチェックに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
-  // ★ 保存：赤=1、右端備考と共通備考もCSVに出力（新しい最下段列として）
+  // 保存：赤=1、右端備考と共通備考もCSVに出力
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
 
     const rowCount = cellRefs.length;
-    for (let r=1; r<rowCount; r++){ // r=0は共通備考行なのでCSV行には含めない
+    for (let r=1; r<rowCount; r++){ // r=0は共通備考行のためCSVには含めない
       const row = [];
-      // c=0..32（0:コース名, 1..31:日付, 32:備考）
       for (let c=0; c<=32; c++){
         if (r <= 2){
-          // r=1:日付行, r=2:曜日行
           if (r===2 && c===32){
-            row.push("コースごとの備考"); // 見出し
+            row.push("コースごとの備考");
           } else {
-            // 既存のテキストを出力
-            // 日付行の先頭セルは「日付」、曜日行の先頭セルは「曜日」
             row.push(cellRefs[r][c]?.textContent ?? '');
           }
         } else {
           if (c === 0) {
-            row.push(cellRefs[r][0]?.textContent ?? ''); // コース名
+            row.push(cellRefs[r][0]?.textContent ?? '');
           } else if (c >= 1 && c <= 31) {
             row.push(cellRefs[r][c]?.classList.contains("highlight-red") ? '1' : '');
           } else if (c === 32) {
@@ -300,7 +277,6 @@
       csv += row.join(',') + '\n';
     }
 
-    // 末尾に共通備考の専用行を追加（ヘッダ,値）
     const commonRemark = (commonRemarkInput && commonRemarkInput.value) ? commonRemarkInput.value : "";
     csv += `共通備考,${commonRemark}\n`;
 
