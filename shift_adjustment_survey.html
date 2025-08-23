@@ -13,7 +13,7 @@
     .spinner { border:3px solid #f3f3f3; border-top:3px solid red; border-radius:50%; width:14px; height:14px; animation:spin 1s linear infinite; display:none; }
     @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
 
-    /* 右端に「コースごとの備考」列（幅は入力欄で確保：48ch） */
+    /* 右端に「コースごとの備考」列（1.5倍の幅：48ch） */
     .grid { display:grid; grid-template-columns:110px repeat(31,36px) 48ch; grid-auto-rows:30px; min-width:max-content; -webkit-overflow-scrolling:touch; }
     .cell { border:1px solid #ccc; text-align:center; line-height:30px; white-space:nowrap; user-select:none; background:#fff; font-size:14px; overflow:hidden; }
 
@@ -44,7 +44,7 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824b</div>
   <div id="messageBox"></div>
 
 <script>
@@ -66,6 +66,7 @@
   let cellRefs = [];
   let year = ''; let month = ''; let targetYm = '';
   let highlightData = [];
+  let savedOutputLines = [];   // ★ 提出済みCSV（行配列のまま保持）
   const rowRemarkInputs = new Map();
 
   const userName = localStorage.getItem("userName") || "未設定";
@@ -84,7 +85,7 @@
       .then(res => res.text())
       .then(text => {
         allInputLines = text.split('\n').filter(l => l.trim());
-        const ym = parseCSVLine(allInputLines[0]);
+        const ym = parseCSVLine(allInputLines[0]); // 0: 年月,YYYY,MM
         year  = ym[1]; month = ym[2];
         targetYm = `${year}${String(month).padStart(2,'0')}`;
         targetDateSpan.textContent = `対象：${year}年${month}月`;
@@ -96,13 +97,12 @@
   function loadGridFromData(lines){
     grid.innerHTML = ''; cellRefs = []; rowRemarkInputs.clear();
 
-    const data = lines.map(parseCSVLine);
+    const data = lines.map(parseCSVLine);        // テンプレ（input_data.txt）由来
     const baseRowCount = data.length;
     const colCount = 33; // 日付31 + 左見出し + 右端備考
 
     const fragment = document.createDocumentFragment();
 
-    // === 日付・曜日・データ行 ===
     for (let r=0; r<baseRowCount; r++){
       const row = [];
       for (let c=0; c<colCount; c++){
@@ -128,17 +128,26 @@
           }
         } else {
           if (c===32){
-            // コース名に応じて placeholder を「◯◯の備考」に設定
+            // ★ 右端備考入力：幅1.5倍、placeholderは「コース名の備考」、さらに提出済み値を復元
             const courseName = data[r]?.[0] ? String(data[r][0]).trim() : "";
             const input = document.createElement("input");
             input.type = "text";
             input.className = "remark-input";
             input.setAttribute("size","75");       // 1.5倍幅
-            input.setAttribute("maxlength","50");  // 入力可能文字数は据え置き
-            input.placeholder = courseName ? `${courseName}の備考` : "備考";
-            input.setAttribute("aria-label", courseName ? `${courseName}の備考` : "備考");
+            input.setAttribute("maxlength","50");  // 上限は据え置き
+            const ph = courseName ? `${courseName}の備考` : "備考";
+            input.placeholder = ph;
+            input.setAttribute("aria-label", ph);
             cell.style.textAlign = "left";
             cell.appendChild(input);
+
+            // ★ 提出済みCSVから備考を復元（行ずれ対策：出力ファイルは先頭2行がヘッダ）
+            const outIdx = r + 2; // 0:日付→2, 1:曜日→3, 2:最初のデータ行→4 ...
+            if (savedOutputLines[outIdx]){
+              const savedCols = savedOutputLines[outIdx].split(',');
+              input.value = (savedCols[32] || '').trim();
+            }
+
             rowRemarkInputs.set(r, input);
           } else {
             cell.textContent = val;
@@ -164,17 +173,24 @@
 
   function applyHighlight(){
     if (!highlightData.length) return;
+    // ★ 行オフセット修正：提出CSVは [0]回答者, [1]年月, [2]日付, [3]曜日, [4]以降がデータ行
     for (let r=2; r<cellRefs.length; r++){
-      const line = highlightData[r+1] || '';
+      const outIdx = r + 2; // ← 共通備考を廃止した現仕様に合わせて +2 に統一
+      const line = highlightData[outIdx] || '';
       const row = line.split(',');
       for (let c=1; c<=31 && c<cellRefs[r].length; c++){
         if (row[c] === '1'){ cellRefs[r][c].classList.add("highlight-red"); }
       }
+      // ※ 右端の備考は loadGridFromData 内で value 復元済み
     }
   }
 
   function mergeInputAndOutput(inputLines, outputLines){
-    highlightData = [...outputLines];
+    // ★ 提出済みCSVを保持（ハイライト＆備考復元に使用）
+    savedOutputLines = outputLines.slice();
+    highlightData    = outputLines.slice();
+
+    // グリッド表示用はテンプレから（日付・曜日・テキストはテンプレを信頼）
     const merged = [];
     merged[0] = inputLines[1];  // 日付
     merged[1] = inputLines[2];  // 曜日
@@ -205,6 +221,9 @@
             })
             .catch(err => { showMessage("ファイル読み込みに失敗しました。\n"+err.message,'error'); hideLoading(); });
         } else {
+          // 新規：ハイライト/備考の既存は無い
+          savedOutputLines = [];
+          highlightData = [];
           const merged = [ inputLines[1], inputLines[2], ...inputLines.slice(3) ];
           loadGridFromData(merged);
           exportBtn.style.display = 'inline-block';
@@ -213,6 +232,7 @@
       .catch(err => { showMessage("ファイルチェックに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
+  // 保存：赤=1、右端備考をCSVに出力（共通備考は廃止）
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
