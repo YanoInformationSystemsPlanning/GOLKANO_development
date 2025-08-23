@@ -13,16 +13,13 @@
     .spinner { border:3px solid #f3f3f3; border-top:3px solid red; border-radius:50%; width:14px; height:14px; animation:spin 1s linear infinite; display:none; }
     @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
 
-    /* 右端に「コースごとの備考」列（幅は入力欄で確保） */
-    .grid { display:grid; grid-template-columns:110px repeat(31,36px) 32ch; grid-auto-rows:30px; min-width:max-content; -webkit-overflow-scrolling:touch; }
-
+    .grid { display:grid; grid-template-columns:110px repeat(31,36px) 48ch; grid-auto-rows:30px; min-width:max-content; -webkit-overflow-scrolling:touch; }
     .cell { border:1px solid #ccc; text-align:center; line-height:30px; white-space:nowrap; user-select:none; background:#fff; font-size:14px; overflow:hidden; }
-    /* スティッキー：共通備考・日付・曜日の順 */
-    .header-0 { position:sticky; top:0; background:#eee; z-index:7; }     /* 共通備考 */
-    .header-1 { position:sticky; top:30px; background:#eee; z-index:6; }  /* 日付 */
-    .header-2 { position:sticky; top:60px; background:#eee; z-index:5; }  /* 曜日 */
-    .fixed-col { position:sticky; left:0; background:#f8f8f8; padding-left:2.5em; z-index:4; }
-    .header-0.fixed-col, .header-1.fixed-col, .header-2.fixed-col { background:#eee; z-index:8; }
+
+    .header-1 { position:sticky; top:0; background:#eee; z-index:7; }  /* 日付 */
+    .header-2 { position:sticky; top:30px; background:#eee; z-index:6; } /* 曜日 */
+    .fixed-col { position:sticky; left:0; background:#f8f8f8; padding-left:2.5em; z-index:5; }
+    .header-1.fixed-col, .header-2.fixed-col { background:#eee; z-index:8; }
 
     .highlight-red { background:red !important; color:#fff; }
     .red { color:red; }
@@ -31,7 +28,6 @@
     #messageBox.show { opacity:1; }
     #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
 
-    /* 入力欄の見た目を控えめに */
     .remark-input { width:100%; box-sizing:border-box; height:28px; border:1px solid #bbb; padding:0 6px; font-size:14px; }
     .remark-input::placeholder { color:#999; }
   </style>
@@ -47,11 +43,10 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250822</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824</div>
   <div id="messageBox"></div>
 
 <script>
-  // iOSバウンス防止
   document.addEventListener('touchmove', e => { if (!e.target.closest('.grid')) e.preventDefault(); }, { passive:false });
 
   const grid = document.getElementById("grid");
@@ -70,10 +65,7 @@
   let cellRefs = [];
   let year = ''; let month = ''; let targetYm = '';
   let highlightData = [];
-
-  // 備考入力の参照
-  let commonRemarkInput = null;
-  const rowRemarkInputs = new Map(); // 表示行index → input要素
+  const rowRemarkInputs = new Map();
 
   const userName = localStorage.getItem("userName") || "未設定";
   memberNameSpan.textContent = userName;
@@ -91,7 +83,7 @@
       .then(res => res.text())
       .then(text => {
         allInputLines = text.split('\n').filter(l => l.trim());
-        const ym = parseCSVLine(allInputLines[0]); // 年月,YYYY,MM
+        const ym = parseCSVLine(allInputLines[0]);
         year  = ym[1]; month = ym[2];
         targetYm = `${year}${String(month).padStart(2,'0')}`;
         targetDateSpan.textContent = `対象：${year}年${month}月`;
@@ -101,7 +93,7 @@
   }
 
   function loadGridFromData(lines){
-    grid.innerHTML = ''; cellRefs = []; rowRemarkInputs.clear(); commonRemarkInput = null;
+    grid.innerHTML = ''; cellRefs = []; rowRemarkInputs.clear();
 
     const data = lines.map(parseCSVLine);
     const baseRowCount = data.length;
@@ -109,36 +101,7 @@
 
     const fragment = document.createDocumentFragment();
 
-    // === 共通備考 行（最上段） ===
-    {
-      const row = [];
-      for (let c=0; c<colCount; c++){
-        const cell = document.createElement("div");
-        cell.className = "cell header-0";
-        if (c===0){
-          cell.classList.add("fixed-col");
-          cell.textContent = "共通備考";
-        } else if (c===1){
-          cell.style.gridColumn = "2 / span 32";
-          cell.style.textAlign = "left";
-          const input = document.createElement("input");
-          input.type = "text";
-          input.className = "remark-input";
-          input.setAttribute("size","50");      // 表示幅は現状のまま（50）
-          input.setAttribute("maxlength","100"); // ★ 入力可能100文字に変更
-          input.placeholder = "（例）全体連絡事項などを記入";
-          cell.appendChild(input);
-          commonRemarkInput = input;
-        } else {
-          cell.style.display = "none";
-        }
-        fragment.appendChild(cell);
-        row.push(cell);
-      }
-      cellRefs.push(row);
-    }
-
-    // === 以降：日付・曜日・データ行 ===
+    // === 日付・曜日・データ行 ===
     for (let r=0; r<baseRowCount; r++){
       const row = [];
       for (let c=0; c<colCount; c++){
@@ -164,20 +127,19 @@
           }
         } else {
           if (c===32){
-            // ★ 各行右端の備考：表示幅50、最大50
+            // ★ 備考欄を1.5倍幅に（size=75）
             const input = document.createElement("input");
             input.type = "text";
             input.className = "remark-input";
-            input.setAttribute("size","50");      // ★ 50文字幅へ変更
-            input.setAttribute("maxlength","50"); // 文字数上限は従来通り
+            input.setAttribute("size","75");      // 50 → 75 に変更
+            input.setAttribute("maxlength","50"); // 入力可能文字数はそのまま
             input.placeholder = "備考";
             cell.style.textAlign = "left";
             cell.appendChild(input);
-            const displayRowIndex = 1 /*共通備考*/ + r + 1;
-            rowRemarkInputs.set(displayRowIndex, input);
+            rowRemarkInputs.set(r, input);
           } else {
             cell.textContent = val;
-            if (c>0 && c<32 && isDataRow && val!==""){ cell.onclick = () => handleCellClick(1 + r + 1, c, cell); }
+            if (c>0 && c<32 && isDataRow && val!==""){ cell.onclick = () => handleCellClick(r, c, cell); }
           }
         }
 
@@ -199,7 +161,7 @@
 
   function applyHighlight(){
     if (!highlightData.length) return;
-    for (let r=3; r<cellRefs.length; r++){
+    for (let r=2; r<cellRefs.length; r++){
       const line = highlightData[r+1] || '';
       const row = line.split(',');
       for (let c=1; c<=31 && c<cellRefs[r].length; c++){
@@ -248,17 +210,16 @@
       .catch(err => { showMessage("ファイルチェックに失敗しました。\n"+err.message,'error'); hideLoading(); });
   }
 
-  // 保存：赤=1、右端備考と共通備考もCSVに出力
   exportBtn.addEventListener('click', () => {
     showLoading("処理中...");
     let csv = `回答者,${userName}\n年月,${year},${month}\n`;
 
     const rowCount = cellRefs.length;
-    for (let r=1; r<rowCount; r++){ // r=0は共通備考行のためCSVには含めない
+    for (let r=0; r<rowCount; r++){
       const row = [];
       for (let c=0; c<=32; c++){
-        if (r <= 2){
-          if (r===2 && c===32){
+        if (r <= 1){
+          if (r===1 && c===32){
             row.push("コースごとの備考");
           } else {
             row.push(cellRefs[r][c]?.textContent ?? '');
@@ -276,9 +237,6 @@
       }
       csv += row.join(',') + '\n';
     }
-
-    const commonRemark = (commonRemarkInput && commonRemarkInput.value) ? commonRemarkInput.value : "";
-    csv += `共通備考,${commonRemark}\n`;
 
     const filename = `${userName}_${targetYm}${FILE_SUFFIX}.txt`;
 
