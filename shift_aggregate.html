@@ -32,7 +32,6 @@
   </style>
 </head>
 <body>
-  <!-- ★ 添付HTMLと同じ配置・表記 -->
   <button onclick="location.href='top_menu.html'">トップに戻る</button>
 
   <header>
@@ -52,13 +51,13 @@
       <div class="note">
         ・<code>shift_adjustment_survey</code> フォルダ直下の <code>*_YYYYMMシフト希望.txt</code> を対象にします。<br/>
         ・対象月（YYYYMM）が混在している場合はエラーで停止します。<br/>
-        ・出力は <code>シフト希望集約_YYYYMM.csv</code>（上書き／無ければ新規）です。
+        ・出力は <code>シフト希望集約_YYYYMM.csv</code>（上書き／無ければ新規）です。<br/>
+        ・出力列パターン：<code>… C:コース名, D:最終カラム以外, E:最終カラム, F:コース名, G:最終カラム以外, H:最終カラム, …</code>
       </div>
     </div>
   </main>
 
-  <!-- ★ 添付HTMLと同じレイアウトでバージョン表記 -->
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250822</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824c</div>
 
   <script>
     // ===== 設定 =====
@@ -97,7 +96,6 @@
       if (!res.ok) throw new Error(`list 失敗: HTTP ${res.status}`);
       const data = await res.json();
       if (data.result !== "success" || !Array.isArray(data.files)) throw new Error("list 形式エラー");
-      // *_YYYYMMシフト希望.txt を対象に
       const rx = /_(\d{6})シフト希望\.txt$/;
       const targets = data.files.filter(n => rx.test(n));
       return { targets, rx };
@@ -122,14 +120,30 @@
       return await res.text();
     }
 
-    // ===== 1ファイル → 1行集約の生成（末尾まで確実に処理） =====
+    // ★ CSV値のクォート（Excel互換）
+    function csvQuote(s) {
+      return `"${String(s ?? "").replace(/"/g, '""')}"`;
+    }
+
+    // ★ 先頭から n 回目のカンマ位置を返す（見つからなければ -1）
+    function nthCommaIndex(str, n) {
+      let idx = -1;
+      while (n-- > 0) {
+        idx = str.indexOf(",", idx + 1);
+        if (idx === -1) return -1;
+      }
+      return idx;
+    }
+
+    // ===== 1ファイル → 1行集約の生成（“回答結果”を 2 分割して出力） =====
     function buildOneRow(yymm, filename, text) {
-      // 行の構造：
+      // 行構造：
       // 0: 回答者,名前 / 1: 年月,YYYY,MM / 2: 日付,... / 3: 曜日,...
-      // 4行目以降：コース名, 以降31列（1/空）※末尾の完全空行のみ除去
+      // 4行目以降：コース名, [日付1..31 の 31列], [最終列=備考 等]
       const rawLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
       let last = rawLines.length - 1;
       while (last >= 0 && rawLines[last].trim() === "") last--;
+
       if (last < 4) throw new Error(`${filename}: 行数不足`);
 
       // 名前は先頭行 or ファイル名から
@@ -139,16 +153,36 @@
       const member = nameFromHead || nameFromFile;
 
       const row = [ yymm, member ];
+
       for (let i = 4; i <= last; i++) {
         const line = rawLines[i] ?? "";
-        const idx = line.indexOf(",");
-        const course = idx >= 0 ? line.slice(0, idx) : line;
-        const rest   = idx >= 0 ? line.slice(idx + 1) : "";
-        // 2列目以降は1セルにまとめるため必ずダブルクオートで囲む（" は "" に）
-        const quoted = `"${rest.replace(/"/g, '""')}"`;
+
+        // 先頭カンマ（コース名の後）と、31日分の末尾（32個目のカンマ）を特定
+        const firstComma = line.indexOf(",");
+        const sepAfterD31 = nthCommaIndex(line, 32); // 1（コース名後）+31（日付）= 32個目
+
+        // コース名
+        const course = (firstComma >= 0) ? line.slice(0, firstComma) : line;
+
+        // “最終カラム以外”（日付1..31を連結）と “最終カラム”（備考 等）
+        let notLast = "";
+        let lastCol = "";
+        if (firstComma >= 0) {
+          if (sepAfterD31 !== -1) {
+            notLast = line.slice(firstComma + 1, sepAfterD31); // 日付1..31
+            lastCol = line.slice(sepAfterD31 + 1);             // 末尾（備考 等／空可）※カンマ含有OK
+          } else {
+            // 旧形式（備考列なし：日付1..31のみ）
+            notLast = line.slice(firstComma + 1);
+            lastCol = "";
+          }
+        }
+
         row.push(course);
-        row.push(quoted);
+        row.push(csvQuote(notLast)); // D, G, J, ...
+        row.push(csvQuote(lastCol)); // E, H, K, ...
       }
+
       return row.join(",");
     }
 
@@ -161,7 +195,7 @@
         const text = await fetchTextFile(name);
         rows.push(buildOneRow(yymm, name, text));
       }
-      const BOM = "\uFEFF"; // ★ Excel対策
+      const BOM = "\uFEFF";
       return BOM + header + "\n" + rows.join("\n") + "\n";
     }
 
