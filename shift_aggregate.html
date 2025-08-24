@@ -19,11 +19,11 @@
     }
     .btn:disabled { opacity:.6; cursor:not-allowed; }
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#eee; color:#333; }
-    #log { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; white-space:pre-wrap; font-size:12px; color:#333; margin-top:10px; }
+    #log { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; white-space:pre-wrap; font-size:12px; color:#333; margin-top:10px; }
     .msg { margin-top:12px; padding:10px 12px; border-radius:8px; font-size:14px; display:none; }
     .msg.ok { display:block; background:#e7f6ec; color:#0f5132; border:1px solid #badbcc; }
     .msg.error { display:block; background:#fdecea; color:#842029; border:1px solid #f5c2c0; }
-    .spinner { width:14px; height:14px; border-radius:50%; border:2px solid #cdd; border-top-color:transparent; animation: spin 1s linear infinite; display:inline-block; vertical-align:-2px; margin-right:6px; }
+    .spinner { width:14px; height:14px; border-radius:50%; border:3px solid #eaeaea; border-top:3px solid var(--primary); animation:spin 1s linear infinite; display:inline-block; vertical-align:-2px; margin-right:6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .note { font-size:12px; color:#555; margin-top:8px; }
     .list { margin-top:10px; font-size:13px; }
@@ -43,29 +43,26 @@
   <main>
     <div class="card">
       <div class="row">
-        <label for="yymm">対象年月(YYYYMM)</label>
-        <input id="yymm" type="text" placeholder="202508" value="" inputmode="numeric" pattern="\\d{6}" style="padding:8px 10px; border-radius:8px; border:1px solid #ccc; width:110px;" />
-        <button id="runBtn" class="btn">集約してCSV出力</button>
+        <button id="runBtn" class="btn">集約を実行</button>
       </div>
-      <div id="msg" class="msg" role="status" aria-live="polite"></div>
-      <div id="fileInfo" class="note"></div>
-      <pre id="log"></pre>
-
+      <div id="msg" class="msg"></div>
+      <div class="list" id="fileInfo"></div>
+      <div id="log"></div>
       <div class="note">
-        ・対象フォルダ：<code>shift_adjustment_survey</code><br/>
-        ・対象ファイル：<code>*_YYYYMMシフト希望.txt</code>（YYYYMM一致のみ）<br/>
-        ・出力ファイル：<code>シフト希望集約_YYYYMM.csv</code>（上書き／無ければ新規）です。<br/>
-        ・出力列パターン：<code>… C:コース名, D:"01,05,07,…", E:最終カラム, F:コース名, G:"…", H:最終カラム, …</code><br/>
-        　※D/G/J…列は 31 項目で出力し、“1”の位置に日付（01〜31）、それ以外は空（例：<code>"01,,,,05,,07,,,,,,,,,,,,,,,,,,,,,,,,31"</code>）
+        ・<code>shift_adjustment_survey</code> フォルダ直下の <code>*_YYYYMMシフト希望.txt</code> を対象にします。<br/>
+        ・対象月（YYYYMM）が混在している場合はエラーで停止します。<br/>
+        ・出力は <code>シフト希望集約_YYYYMM.csv</code>（上書き／無ければ新規）です。<br/>
+        ・出力列パターン：<code>… C:コース名, D:"(日付31項目・非圧縮)", E:最終カラム, F:コース名, G:"(日付31項目・非圧縮)", H:最終カラム, …</code><br/>
+        　※D/G/J…列は **31 項目で出力**し、“1”の位置に日付（01〜31）、それ以外は空（例：<code>"01,,,,05,,07,,,,,,,,,,,,,,,,,,,,,,,,31"</code>）
       </div>
     </div>
   </main>
 
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824e</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824d</div>
 
   <script>
     // ===== 設定 =====
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbx_dummy/exec"; // ★差し替えてください
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
     const FOLDER  = "shift_adjustment_survey";
 
     // ===== 要素参照 =====
@@ -97,19 +94,31 @@
     async function listShiftFiles() {
       const url = `${GAS_URL}?action=list&folder=${encodeURIComponent(FOLDER)}`;
       const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error("Drive 一覧取得に失敗しました");
+      if (!res.ok) throw new Error(`list 失敗: HTTP ${res.status}`);
       const data = await res.json();
-      if (!Array.isArray(data.files)) throw new Error("フォーマット不正（files）");
-      return data.files;
+      if (data.result !== "success" || !Array.isArray(data.files)) throw new Error("list 形式エラー");
+      const rx = /_(\d{6})シフト希望\.txt$/;
+      const targets = data.files.filter(n => rx.test(n));
+      return { targets, rx };
     }
 
-    // ===== Drive からテキスト取得 =====
-    async function fetchTextFile(fileId) {
-      const url = `${GAS_URL}?action=read&fileId=${encodeURIComponent(fileId)}`;
+    // ===== YYYYMM 一致チェック =====
+    function checkUniformYm(files, rx) {
+      const ymSet = new Set();
+      files.forEach(n => { const m = n.match(rx); if (m) ymSet.add(m[1]); });
+      if (ymSet.size !== 1) {
+        const list = [...ymSet].join(", ");
+        throw new Error(`処理対象ファイルの対象月情報が正しくない（検出: ${list || "なし"}）`);
+      }
+      return [...ymSet][0];
+    }
+
+    // ===== 1ファイルのテキスト取得 =====
+    async function fetchTextFile(name) {
+      const url = `${GAS_URL}?action=read&folder=${encodeURIComponent(FOLDER)}&file=${encodeURIComponent(name)}`;
       const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error("テキスト取得に失敗しました");
-      const text = await res.text();
-      return text.replace(/\r\n?|\n/g, "\n"); // 改行正規化
+      if (!res.ok) throw new Error(`read 失敗: ${name} / HTTP ${res.status}`);
+      return await res.text();
     }
 
     // === CSV クォート（Excel互換） ===
@@ -130,7 +139,7 @@
     // === “1の立っている日（01〜31）” を31項目そのまま出力（非圧縮） ===
     function compactOnePositions(notLastStr) {
       // notLastStrは「日付1..31」のカンマ区切り（31項目想定）
-      // ★ 非圧縮：31項目で出力し、“1”の位置には 01..31、それ以外は空文字
+      // 非圧縮：31項目で出力し、“1”の位置には 01..31、それ以外は空文字
       const raw = String(notLastStr || "");
       const parts = raw.split(",");
       const out = [];
@@ -141,24 +150,24 @@
       return out.join(","); // 例: "01,,,,05,,07,,,,,,,,,,,,,,,,,,,,,,,,31"
     }
 
-    // ===== 1ファイル → 1行集約の生成（“最終カラム以外”を非圧縮形式で出力） =====
+    // ===== 1ファイル → 1行集約の生成（“最終カラム以外”を非圧縮で出力） =====
     function buildOneRow(yymm, filename, text) {
       // 行構造：
       // 0: 回答者,名前 / 1: 年月,YYYY,MM / 2: 日付,... / 3: 曜日,...
-      // 4行目以降：コース名, [日付1..31], [最終カラム（備考 等／無い場合あり）]
-      const rawLines = text.split("\n");
-      const row = [];
+      // 4行目以降：コース名, [日付1..31], [最終列=備考 等]
+      const rawLines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+      let last = rawLines.length - 1;
+      while (last >= 0 && rawLines[last].trim() === "") last--;
+      if (last < 4) throw new Error(`${filename}: 行数不足`);
 
-      // 回答者名の推定
-      const responder = (rawLines[0] && rawLines[0].startsWith("名前,"))
-        ? (rawLines[0].split(",")[1] || "").trim()
-        : filename.replace(/_.*$/, "");
+      // 名前は先頭行 or ファイル名から
+      const headCols = (rawLines[0] || "").split(",");
+      const nameFromHead = headCols.length >= 2 ? headCols[1] : null;
+      const nameFromFile = filename.split("_")[0];
+      const member = nameFromHead || nameFromFile;
 
-      row.push(responder); // B列相当（CSVでは列順は後で固定）
-      row.push(yymm);      // A列相当（出力時に順番整列）
+      const row = [ yymm, member ];
 
-      // 4行目以降を処理
-      const last = rawLines.length - 1;
       for (let i = 4; i <= last; i++) {
         const line = rawLines[i] ?? "";
         const firstComma = line.indexOf(",");
@@ -181,97 +190,72 @@
           }
         }
 
-        // ★ “1”の位置に日付を配置（非圧縮・31項目）
-        const compressed = compactOnePositions(notLast);
+        // ★ 非圧縮：31項目で“1”に日付（01..31）を配置
+        const nonCompressed = compactOnePositions(notLast);
 
         row.push(course);               // C, F, I, ...
-        row.push(csvQuote(compressed)); // D, G, J, ...  ← 例 "01,,,,05,,07,,,,,,,,,,,,,,,,,,,,,,,,31"
+        row.push(csvQuote(nonCompressed)); // D, G, J, ...  ← 例 "01,,,,05,,07,,,,,,,,,,,,,,,,,,,,,,,,31"
         row.push(csvQuote(lastCol));    // E, H, K, ...
       }
 
-      // 出力順に整形：[YYYYMM, 回答者, (C,D,E)×n]
-      const yyyy = yymm.slice(0, 4);
-      const mm   = yymm.slice(4, 6);
-
-      const out = [];
-      out.push(yymm);         // A列
-      out.push(responder);    // B列
-      for (let i = 2; i < row.length; i++) out.push(row[i]);
-
-      return out.join(",");
+      return row.join(",");
     }
 
-    // ===== CSV 全文を生成 =====
-    function buildCsv(yymm, entries) {
-      const lines = [];
-      lines.push(`シフト希望集約_${yymm}`);
-      for (const e of entries) {
-        lines.push(buildOneRow(yymm, e.name, e.text));
+    // ===== すべて集約 → CSV テキスト（UTF-8 BOM付与でExcel文字化け防止） =====
+    async function buildAggregateCsv(targets, yymm) {
+      const header = `シフト希望集約_${yymm}`;
+      const rows = [];
+      for (const name of targets) {
+        logln(`読込: ${name}`);
+        const text = await fetchTextFile(name);
+        rows.push(buildOneRow(yymm, name, text));
       }
-      return lines.join("\n") + "\n"; // 末尾改行
+      const BOM = "\uFEFF";
+      return BOM + header + "\n" + rows.join("\n") + "\n";
     }
 
-    // ===== CSV 保存要求（GAS 側へ） =====
+    // ===== CSV を Drive に保存（上書き or 新規） =====
     async function saveAggregateCsv(yymm, csvText) {
-      // UTF-8 BOMを付加
-      const bom = "\uFEFF";
-      const body = bom + csvText;
-
-      const res = await fetch(GAS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=UTF-8" },
-        body: JSON.stringify({
-          action: "save",
-          folder: FOLDER,
-          name: `シフト希望集約_${yymm}.csv`,
-          content: body
-        })
-      });
-      if (!res.ok) throw new Error("CSV 保存に失敗しました");
+      const outName = `シフト希望集約_${yymm}.csv`;
+      const url = `${GAS_URL}?action=overwrite&folder=${encodeURIComponent(FOLDER)}&filename=${encodeURIComponent(outName)}`;
+      const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"text/plain" }, body: csvText });
+      if (!res.ok) throw new Error(`保存失敗: HTTP ${res.status}`);
       const data = await res.json();
-      return { outName: `シフト希望集約_${yymm}.csv`, api: data };
+      if (data.result !== "success") throw new Error(`保存エラー: ${data.message || "不明"}`);
+      return { outName, api:data };
     }
 
-    // ===== メイン処理 =====
-    $run.addEventListener("click", async () => {
-      clearLog();
-      const yymm = (document.getElementById("yymm").value || "").trim();
+    // ===== 画面：対象一覧の表示 =====
+    function renderTargetList(files, yymm) {
+      const $fileInfo = document.getElementById("fileInfo");
+      if (!files.length) { $fileInfo.textContent = "対象ファイルはありません。"; return; }
+      const html = [
+        `<div><b>対象月:</b> ${yymm}</div>`,
+        `<div><b>対象ファイル (${files.length}件):</b></div>`,
+        "<ul style='margin:6px 0 0 18px;padding:0;'>",
+        ...files.map(n => `<li style="margin:2px 0;"><code>${n}</code></li>`),
+        "</ul>"
+      ].join("");
+      $fileInfo.innerHTML = html;
+    }
 
-      setBusy(true, "一覧取得中…");
+    // ===== 実行ボタン =====
+    document.getElementById("runBtn").addEventListener("click", async () => {
+      clearLog(); setBusy(true, "一覧取得中…");
       try {
-        const files = await listShiftFiles();
-        const targets = files.filter(f => new RegExp(`_${yymm}シフト希望\.txt$`).test(f.name));
-        if (targets.length === 0) { throw new Error("対象ファイルが見つかりません"); }
+        // 1) 一覧
+        const { targets, rx } = await listShiftFiles();
+        if (!targets.length) { err("処理対象（*_YYYYMMシフト希望.txt）が見つかりません。"); setBusy(false, "待機中"); return; }
 
-        $fileInfo.textContent = `${targets.length} 件ヒット`;
+        // 2) YYYYMM 一致チェック
+        const yymm = checkUniformYm(targets, rx);
+        renderTargetList(targets, yymm);
 
-        setBusy(true, "読込中…");
-        const entries = [];
-        for (const f of targets) {
-          const text = await fetchTextFile(f.id);
-          entries.push({ name: f.name, text });
-        }
+        // 3) 集約
+        setBusy(true, "集約中…");
+        const csvText = await buildAggregateCsv(targets, yymm);
 
-        setBusy(true, "CSV 生成中…");
-        const csvText = buildCsv(yymm, entries);
-
-        setBusy(true, "保存中…");
-        const { outName, api } = await saveAggregateCsv(yymm, csvText);
-
-        info(`完了：${outName}
-処理：${api.operation}${api.created===true?"（新規作成）":api.created===false?"（上書き）":""}`);
-        setBusy(false, "完了");
-      } catch (e) {
-        console.error(e);
-        err(e.message || "エラーが発生しました。");
-        setBusy(false, "待機中");
-      }
-    });
-        }
-
-        setBusy(true, "CSV 生成中…");
-        const csvText = buildCsv(yymm, entries);
-
+        // 4) 保存（上書き／なければ新規）
         setBusy(true, "保存中…");
         const { outName, api } = await saveAggregateCsv(yymm, csvText);
 
