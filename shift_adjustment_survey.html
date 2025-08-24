@@ -3,11 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <title>シフト調整ツール</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
   <meta http-equiv="Cache-Control" content="no-store" />
-  <style>
+  <style>html, body { -webkit-text-size-adjust: 100%; }
+
+
     html, body { margin:0; padding:0; font-family:sans-serif; width:100vw; height:100vh; overflow:auto; overscroll-behavior:none; }
-    .header-bar { display:flex; align-items:center; gap:1em; padding:5px 10px; background:#f0f0f0; border-bottom:1px solid #ccc; font-size:14px; }
+    .header-bar {
+  display:flex; align-items:center; gap:.5em; padding:5px 10px;
+  background:#f0f0f0; border-bottom:1px solid #ccc; font-size:14px;
+  flex-wrap: nowrap; white-space: nowrap; overflow: hidden;
+}
+.header-bar > * { flex: 0 0 auto; }
+#memberName { min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; }
+#targetDate { flex:0 0 auto; }
     button { padding:2px 6px; font-size:14px; cursor:pointer; }
     .status { font-weight:bold; color:red; display:inline-flex; align-items:center; gap:6px; }
     .spinner { border:3px solid #f3f3f3; border-top:3px solid red; border-radius:50%; width:14px; height:14px; animation:spin 1s linear infinite; display:none; }
@@ -29,7 +38,7 @@
     #messageBox.show { opacity:1; }
     #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
 
-    .remark-input { width:100%; box-sizing:border-box; height:28px; border:1px solid #bbb; padding:0 6px; font-size:14px; }
+    .remark-input { width:100%; box-sizing:border-box; height:32px; border:1px solid #bbb; padding:0 6px; font-size:16px; line-height:32px; }
     .remark-input::placeholder { color:#999; }
   </style>
 </head>
@@ -44,7 +53,7 @@
   </div>
 
   <div class="grid" id="grid"></div>
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824b</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824c</div>
   <div id="messageBox"></div>
 
 <script>
@@ -284,5 +293,19 @@
   window.onload = initAllData;
 </script>
 <script src="reload.js?v=20250724"></script>
+
+<script>
+// iOS: 回転時の予期しないズーム抑止（viewport再適用＆フォーカス解除）
+window.addEventListener('orientationchange', () => {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (meta) {
+    meta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no');
+  }
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+});
+</script>
+
 </body>
 </html>
