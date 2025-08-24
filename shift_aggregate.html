@@ -236,12 +236,11 @@
     $run.addEventListener("click", async () => {
       clearLog();
       const yymm = (document.getElementById("yymm").value || "").trim();
-      if (!/^\d{6}$/.test(yymm)) { err("YYYYMM を入力してください。"); return; }
 
       setBusy(true, "一覧取得中…");
       try {
         const files = await listShiftFiles();
-        const targets = files.filter(f => new RegExp(`_${yymm}シフト希望\\.txt$`).test(f.name));
+        const targets = files.filter(f => new RegExp(`_${yymm}シフト希望\.txt$`).test(f.name));
         if (targets.length === 0) { throw new Error("対象ファイルが見つかりません"); }
 
         $fileInfo.textContent = `${targets.length} 件ヒット`;
@@ -251,6 +250,23 @@
         for (const f of targets) {
           const text = await fetchTextFile(f.id);
           entries.push({ name: f.name, text });
+        }
+
+        setBusy(true, "CSV 生成中…");
+        const csvText = buildCsv(yymm, entries);
+
+        setBusy(true, "保存中…");
+        const { outName, api } = await saveAggregateCsv(yymm, csvText);
+
+        info(`完了：${outName}
+処理：${api.operation}${api.created===true?"（新規作成）":api.created===false?"（上書き）":""}`);
+        setBusy(false, "完了");
+      } catch (e) {
+        console.error(e);
+        err(e.message || "エラーが発生しました。");
+        setBusy(false, "待機中");
+      }
+    });
         }
 
         setBusy(true, "CSV 生成中…");
