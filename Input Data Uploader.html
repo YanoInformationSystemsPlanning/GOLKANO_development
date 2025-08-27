@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>シフト調整アンケート用入力データエディタ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root { --accent:#007bff; --muted:#f0f0f0; }
+    html,body { margin:0; padding:0; font-family:system-ui, sans-serif; background:#fff; color:#222; }
+    header { position:sticky; top:0; background:var(--muted); border-bottom:1px solid #ccc; padding:8px 12px; display:flex; align-items:center; gap:.5rem; }
+    header h1 { font-size:16px; margin:0; flex:1; }
+    main { padding:12px; }
+    .toolbar { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .toolbar h2 { margin:0; font-size:15px; }
+    .spacer { flex:1; }
+    button { cursor:pointer; padding:6px 10px; border:1px solid #bbb; background:#fff; border-radius:6px; }
+    button.primary { border-color:var(--accent); }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px; line-height:1.3; }
+    .notice { margin-top:8px; font-size:13px; color:#555; }
+    #messageBox { position:fixed; right:12px; top:12px; background:#333; color:#fff; padding:10px 16px; border-radius:8px;
+                  opacity:0; transform:translateY(-8px); transition:.25s; pointer-events:none; white-space:pre-line; }
+    #messageBox.show { opacity:1; transform:translateY(0); }
+    #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
+  </style>
+</head>
+<body>
+  <header>
+    <button id="backBtn">トップに戻る</button>
+    <h1>シフト調整アンケート データ編集</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>シフト調整アンケート用入力データ</h2>
+      <div class="spacer"></div>
+      <button id="applyBtn" class="primary">データ反映</button>
+    </div>
+
+    <!-- 指定：横100文字×縦35行 -->
+    <textarea id="inputArea" cols="100" rows="35" placeholder="先頭行に「年月,YYYY,MM」を含めてください。&#10;例: 年月,2025,09"></textarea>
+
+    <div class="notice">
+      ・「データ反映」＝ Google Apps Script 経由で Google Drive 内
+      <code>shift_adjustment_survey</code> フォルダへ <code>input_data.txt</code> を上書き保存します。:contentReference[oaicite:2]{index=2}
+    </div>
+  </main>
+
+  <div id="messageBox"></div>
+
+  <script>
+    // 既存ツールと同一の GAS エンドポイント（必要に応じて差し替え）
+    // 参考：既存画面の fetch 先で read/list を実施（本画面は overwrite 保存のみ使用）:contentReference[oaicite:3]{index=3}
+    const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
+    const folderKeyword = "shift_adjustment_survey";
+    const targetFilename = "input_data.txt";
+
+    const backBtn   = document.getElementById("backBtn");
+    const applyBtn  = document.getElementById("applyBtn");
+    const inputArea = document.getElementById("inputArea");
+    const messageBox= document.getElementById("messageBox");
+
+    backBtn.addEventListener("click", () => {
+      // 呼び出し元に戻る（上位プログラム遷移前提）
+      if (history.length > 1) history.back(); else location.href = "top_menu.html";
+    });
+
+    function showMessage(msg, type = "info") {
+      messageBox.className = `show ${type}`;
+      messageBox.textContent = msg;
+      setTimeout(() => messageBox.classList.remove("show"), 3000);
+    }
+
+    function parseYYYYMMFromFirstLine(text) {
+      // 先頭行は「年月,YYYY,MM」を想定
+      const first = (text.split(/\r?\n/)[0] || "").trim();
+      const parts = first.split(",").map(s => s.trim());
+      if (parts.length >= 3 && parts[0] === "年月") {
+        const y = parts[1];
+        const m = String(parts[2]).padStart(2, "0");
+        if (/^\d{4}$/.test(y) && /^\d{2}$/.test(m)) return { y, m };
+      }
+      return null;
+    }
+
+    applyBtn.addEventListener("click", async () => {
+      const bodyText = inputArea.value || "";
+      if (!bodyText.trim()) {
+        showMessage("入力データが空です。", "error");
+        return;
+      }
+      const ym = parseYYYYMMFromFirstLine(bodyText);
+      if (!ym) {
+        showMessage('先頭行に「年月,YYYY,MM」の形式で年月を記載してください。', "error");
+        return;
+      }
+
+      try {
+        // GAS 側の doPost 仕様：action=overwrite / folder=shift_adjustment_survey / filename=input_data.txt / body=text/plain :contentReference[oaicite:4]{index=4}
+        const url = `${gasUrl}?action=overwrite&folder=${encodeURIComponent(folderKeyword)}&filename=${encodeURIComponent(targetFilename)}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: bodyText
+        });
+        // 返却は JSON（{ result, operation, created, ... }）:contentReference[oaicite:5]{index=5}
+        const data = await res.json().catch(() => ({}));
+
+        if (data && data.result === "success") {
+          showMessage(`${ym.y}年${ym.m}月対応 シフト調整アンケート用入力データ作成が完了しました。`, "success");
+        } else {
+          const msg = (data && data.message) ? data.message : "不明なエラー";
+          showMessage("保存に失敗しました：" + msg, "error");
+        }
+      } catch (err) {
+        showMessage("通信エラー：" + err.message, "error");
+      }
+    });
+  </script>
+</body>
+</html>
