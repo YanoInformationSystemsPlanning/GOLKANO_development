@@ -2,81 +2,79 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <meta http-equiv="Cache-Control" content="no-store" />
-  <title>GOLKANO トップメニュー</title>
-
-  <!-- PWA関連（必要なら既存の manifest / アイコンを流用） -->
-  <link rel="manifest" href="manifest.json" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="GOLKANO" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
-
+  <title>トップメニュー</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
-    body { margin:0; padding:0; font-family:sans-serif; background:#f5f5f5; text-align:center; }
-    .version-label { position:fixed; top:5px; left:10px; font-size:14px; color:#555; font-weight:bold; }
-    .header-area { display:flex; align-items:center; justify-content:center; margin-top:20px; gap:10px; padding:0 10px; }
-    .logo { height:1.5em; width:auto; flex-shrink:0; }
-    @media (max-width:480px){ .logo{ height:1.2em; } }
-    #userInfo { margin-top:8px; color:#444; font-size:14px; }
+    :root { --bg:#ffffff; --fg:#222; --muted:#f6f6f6; --border:#d0d0d0; --accent:#007bff; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--fg); font-family:system-ui, -apple-system, Segoe UI, Roboto, "ヒラギノ角ゴ ProN", "Noto Sans JP", sans-serif; }
+    header { position:sticky; top:0; background:var(--muted); border-bottom:1px solid var(--border); padding:12px 16px; }
+    header h1 { margin:0; font-size:18px; }
+    main { padding:16px; }
+    .menu { display:flex; flex-wrap:wrap; gap:12px; }
     .menu-button {
-      display:block; margin:15px auto; padding:15px 30px; font-size:18px;
-      border:none; border-radius:8px; background:#4CAF50; color:#fff; cursor:pointer; width:250px;
+      appearance:none; cursor:pointer;
+      padding:10px 14px; border:1px solid var(--border); border-radius:10px;
+      background:#fff; font-size:16px; min-width:200px; text-align:center;
+      transition: transform .02s ease, box-shadow .2s ease, border-color .2s ease;
     }
-    .menu-button:hover { background:#45a049; }
-    .admin-button { background:#d9534f; }
-    #topButton {
-      margin-top:10px; padding:8px 16px; font-size:14px; background:#2196F3; color:#fff; border:none; border-radius:5px; cursor:pointer;
-    }
+    .menu-button:hover { box-shadow:0 2px 10px rgba(0,0,0,.08); border-color:#bbb; }
+    .menu-button:active { transform: translateY(1px); }
+    .admin-badge { font-size:12px; color:#555; margin-top:8px; }
   </style>
 </head>
 <body>
-  <button id="topButton" onclick="location.href='index.html'">ログインに戻る</button>
-  <div class="version-label">Ver.20250822</div>
+  <header>
+    <h1>トップメニュー</h1>
+  </header>
 
-  <div class="header-area">
-    <img src="GOLKANO.ロゴ.png" alt="GOLKANO ロゴ" class="logo" />
-    <div id="userTypeLabel">トップメニュー</div>
-  </div>
-  <div id="userInfo"></div>
-
-  <div id="menuArea" style="margin-top:10px;"></div>
+  <main>
+    <div id="menu" class="menu" aria-label="機能メニュー"></div>
+    <div id="roleInfo" class="admin-badge" aria-live="polite"></div>
+  </main>
 
   <script>
-    (function init() {
-      const name = localStorage.getItem("userName") || "";
-      const role = (localStorage.getItem("userRole") || "regular").toLowerCase();
+    // --- ロール判定 ---
+    // 既存ページなどで window.role が定義されていればそれを採用。
+    // 未定義なら localStorage.role を参照。どちらも無ければ "user"。
+    const resolvedRole = (typeof window.role === "string" && window.role) ||
+                         (localStorage.getItem("role") || "").trim() ||
+                         "user";
 
-      // 未ログインならログインへ戻す
-      if (!name) {
-        location.href = "index.html";
-        return;
-      }
+    // --- メニュー定義 ---
+    // 表示順に配列定義。「adminOnly:true」の項目は admin のみ表示。
+    const menuItems = [
+      { label: "シフト希望", href: "shift_adjustment_survey.html" },
+      { label: "シフト希望確認準備", href: "input_data_uploader.html", adminOnly: true }, // ★ 追加ボタン（admin限定）
+      { label: "シフト希望集約", href: "shift_aggregate.html" }
+    ];
 
-      // 画面上の表示
-      document.getElementById("userInfo").textContent = `ログイン中：${name}（${role}）`;
-      const label = (role === "admin") ? "管理者メニュー" : "業務メニュー";
-      document.getElementById("userTypeLabel").textContent = label;
+    // --- 描画 ---
+    const menuEl = document.getElementById("menu");
+    const roleInfoEl = document.getElementById("roleInfo");
 
-      // メニュー出し分け
-      const area = document.getElementById("menuArea");
-      if (role === "admin") {
-        area.innerHTML = `
-          <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト希望</button>
-          <button class="menu-button" onclick="location.href='shift_aggregate.html'">シフト希望集約</button>
-          <button class="menu-button admin-button" onclick="location.href='ranking_tool.html'">優先順位決め</button>
-        `;
-      } else {
-        area.innerHTML = `
-          <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト希望</button>
-        `;
-      }
-    })();
+    function createButton(item) {
+      const btn = document.createElement("button");
+      btn.className = "menu-button";
+      btn.type = "button";
+      btn.textContent = item.label;
+      btn.addEventListener("click", () => { location.href = item.href; });
+      return btn;
+    }
+
+    function renderMenu(role) {
+      menuEl.innerHTML = "";
+      menuItems.forEach(item => {
+        if (item.adminOnly && role !== "admin") return; // admin限定
+        menuEl.appendChild(createButton(item));
+      });
+      roleInfoEl.textContent = (role === "admin")
+        ? "現在の権限: 管理者（admin）"
+        : "現在の権限: 一般（user）";
+    }
+
+    renderMenu(resolvedRole);
+    // 参考: 動的に切り替える場合は localStorage.setItem('role','admin') などを行い、再描画してください。
+    // 例) localStorage.setItem('role','admin'); location.reload();
   </script>
-  <script src="reload.js?v=20250724"></script>
 </body>
 </html>
-
-
-
