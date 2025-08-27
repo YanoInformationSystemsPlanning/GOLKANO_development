@@ -21,6 +21,19 @@
                   opacity:0; transform:translateY(-8px); transition:.25s; pointer-events:none; white-space:pre-line; }
     #messageBox.show { opacity:1; transform:translateY(0); }
     #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
+
+    /* ▼ スピナー（処理中オーバーレイ） */
+    #spinnerOverlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,0.65);
+      display: none; place-items: center; z-index: 9999;
+      backdrop-filter: blur(2px);
+    }
+    #spinnerOverlay.show { display: grid; }
+    .spinner {
+      width: 48px; height: 48px; border: 5px solid #ddd; border-top-color: #007bff;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -37,49 +50,88 @@
     </div>
 
     <!-- 指定：横100文字×縦35行 -->
-    <textarea id="inputArea" cols="100" rows="35" placeholder="先頭行に「年月,YYYY,MM」を含めてください。&#10;例: 年月,2025,09"></textarea>
+    <textarea id="inputArea" cols="100" rows="35"></textarea>
 
     <div class="notice">
       ・「データ反映」＝ Google Apps Script 経由で Google Drive 内
-      <code>shift_adjustment_survey</code> フォルダへ <code>input_data.txt</code> を上書き保存します。:contentReference[oaicite:2]{index=2}
+      <code>shift_adjustment_survey</code> フォルダへ <code>input_data.txt</code> を上書き保存します。
     </div>
   </main>
 
-  <div id="messageBox"></div>
+  <div id="messageBox" role="status" aria-live="polite"></div>
+
+  <!-- ▼ スピナーオーバーレイ -->
+  <div id="spinnerOverlay" aria-hidden="true" aria-label="処理中">
+    <div class="spinner" aria-role="progressbar"></div>
+  </div>
 
   <script>
-    // 既存ツールと同一の GAS エンドポイント（必要に応じて差し替え）
-    // 参考：既存画面の fetch 先で read/list を実施（本画面は overwrite 保存のみ使用）:contentReference[oaicite:3]{index=3}
+    // === 設定（必要に応じて差し替え） ===
     const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
     const folderKeyword = "shift_adjustment_survey";
     const targetFilename = "input_data.txt";
+    const MESSAGE_DURATION_MS = 7000; // ★ 要望：7秒保持
 
-    const backBtn   = document.getElementById("backBtn");
-    const applyBtn  = document.getElementById("applyBtn");
-    const inputArea = document.getElementById("inputArea");
-    const messageBox= document.getElementById("messageBox");
+    const backBtn     = document.getElementById("backBtn");
+    const applyBtn    = document.getElementById("applyBtn");
+    const inputArea   = document.getElementById("inputArea");
+    const messageBox  = document.getElementById("messageBox");
+    const spinner     = document.getElementById("spinnerOverlay");
+
+    // ★ 入力欄にコメントとして初期文面を表示
+    const initialComment = [
+      "# Excelの要請数一覧シートの「シフト調整アンケート用入力データ」をコピーして貼り付けてください。",
+      "# 入力データは次のような内容になります。",
+      "# 年月,YYYY,MM",
+      "# 日付,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31",
+      "# 曜日,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金",
+      "# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
+      "# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
+      "# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"
+    ].join("\n");
+    // 既に値がなければ初期コメントをセット（戻ってきた際の上書きを避ける）
+    if (!inputArea.value) inputArea.value = initialComment + "\n";
 
     backBtn.addEventListener("click", () => {
-      // 呼び出し元に戻る（上位プログラム遷移前提）
       if (history.length > 1) history.back(); else location.href = "top_menu.html";
     });
 
+    let messageTimer = null;
     function showMessage(msg, type = "info") {
+      if (messageTimer) { clearTimeout(messageTimer); messageTimer = null; }
       messageBox.className = `show ${type}`;
       messageBox.textContent = msg;
-      setTimeout(() => messageBox.classList.remove("show"), 3000);
+      messageTimer = setTimeout(() => {
+        messageBox.classList.remove("show");
+        messageTimer = null;
+      }, MESSAGE_DURATION_MS);
     }
 
     function parseYYYYMMFromFirstLine(text) {
-      // 先頭行は「年月,YYYY,MM」を想定
-      const first = (text.split(/\r?\n/)[0] || "").trim();
-      const parts = first.split(",").map(s => s.trim());
+      // 先頭行は「年月,YYYY,MM」を想定（先頭が # のコメントでも許容）
+      const lines = text.split(/\r?\n/);
+      const firstNonEmpty = (lines.find(l => l.trim() !== "") || "").trim().replace(/^#\s?/, "");
+      const parts = firstNonEmpty.split(",").map(s => s.trim());
       if (parts.length >= 3 && parts[0] === "年月") {
         const y = parts[1];
         const m = String(parts[2]).padStart(2, "0");
         if (/^\d{4}$/.test(y) && /^\d{2}$/.test(m)) return { y, m };
       }
       return null;
+    }
+
+    function setBusy(busy) {
+      if (busy) {
+        spinner.classList.add("show");
+        spinner.setAttribute("aria-hidden", "false");
+        applyBtn.disabled = true;
+        backBtn.disabled = true;
+      } else {
+        spinner.classList.remove("show");
+        spinner.setAttribute("aria-hidden", "true");
+        applyBtn.disabled = false;
+        backBtn.disabled = false;
+      }
     }
 
     applyBtn.addEventListener("click", async () => {
@@ -94,15 +146,15 @@
         return;
       }
 
+      const url = `${gasUrl}?action=overwrite&folder=${encodeURIComponent(folderKeyword)}&filename=${encodeURIComponent(targetFilename)}`;
+
       try {
-        // GAS 側の doPost 仕様：action=overwrite / folder=shift_adjustment_survey / filename=input_data.txt / body=text/plain :contentReference[oaicite:4]{index=4}
-        const url = `${gasUrl}?action=overwrite&folder=${encodeURIComponent(folderKeyword)}&filename=${encodeURIComponent(targetFilename)}`;
+        setBusy(true); // ★ スピナー表示開始
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
           body: bodyText
         });
-        // 返却は JSON（{ result, operation, created, ... }）:contentReference[oaicite:5]{index=5}
         const data = await res.json().catch(() => ({}));
 
         if (data && data.result === "success") {
@@ -113,6 +165,8 @@
         }
       } catch (err) {
         showMessage("通信エラー：" + err.message, "error");
+      } finally {
+        setBusy(false); // ★ スピナー非表示
       }
     });
   </script>
