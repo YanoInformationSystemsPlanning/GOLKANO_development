@@ -22,7 +22,7 @@
     #messageBox.show { opacity:1; transform:translateY(0); }
     #messageBox.success { background:#28a745; } #messageBox.error { background:#dc3545; } #messageBox.info { background:#007bff; }
 
-    /* ▼ スピナー（処理中オーバーレイ） */
+    /* スピナー */
     #spinnerOverlay {
       position: fixed; inset: 0; background: rgba(255,255,255,0.65);
       display: none; place-items: center; z-index: 9999;
@@ -49,8 +49,15 @@
       <button id="applyBtn" class="primary">データ反映</button>
     </div>
 
-    <!-- 指定：横100文字×縦35行 -->
-    <textarea id="inputArea" cols="100" rows="35"></textarea>
+    <!-- 横100文字×縦35行／placeholderは入力開始で消える -->
+    <textarea id="inputArea" cols="100" rows="35" placeholder="# Excelの要請数一覧シートの「シフト調整アンケート用入力データ」をコピーして貼り付けてください。
+# 入力データは次のような内容になります。
+# 年月,YYYY,MM
+# 日付,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+# 曜日,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金
+# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"></textarea>
 
     <div class="notice">
       ・「データ反映」＝ Google Apps Script 経由で Google Drive 内
@@ -60,37 +67,23 @@
 
   <div id="messageBox" role="status" aria-live="polite"></div>
 
-  <!-- ▼ スピナーオーバーレイ -->
+  <!-- スピナー -->
   <div id="spinnerOverlay" aria-hidden="true" aria-label="処理中">
     <div class="spinner" aria-role="progressbar"></div>
   </div>
 
   <script>
-    // === 設定（必要に応じて差し替え） ===
+    // === 設定 ===
     const gasUrl = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec";
     const folderKeyword = "shift_adjustment_survey";
     const targetFilename = "input_data.txt";
-    const MESSAGE_DURATION_MS = 7000; // ★ 要望：7秒保持
+    const MESSAGE_DURATION_MS = 7000; // 7秒キープ
 
     const backBtn     = document.getElementById("backBtn");
     const applyBtn    = document.getElementById("applyBtn");
     const inputArea   = document.getElementById("inputArea");
     const messageBox  = document.getElementById("messageBox");
     const spinner     = document.getElementById("spinnerOverlay");
-
-    // ★ 入力欄にコメントとして初期文面を表示
-    const initialComment = [
-      "# Excelの要請数一覧シートの「シフト調整アンケート用入力データ」をコピーして貼り付けてください。",
-      "# 入力データは次のような内容になります。",
-      "# 年月,YYYY,MM",
-      "# 日付,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31",
-      "# 曜日,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金",
-      "# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
-      "# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
-      "# コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,"
-    ].join("\n");
-    // 既に値がなければ初期コメントをセット（戻ってきた際の上書きを避ける）
-    if (!inputArea.value) inputArea.value = initialComment + "\n";
 
     backBtn.addEventListener("click", () => {
       if (history.length > 1) history.back(); else location.href = "top_menu.html";
@@ -107,11 +100,11 @@
       }, MESSAGE_DURATION_MS);
     }
 
+    // 先頭の「年月,YYYY,MM」を抽出（コメントで始まる行は無視）
     function parseYYYYMMFromFirstLine(text) {
-      // 先頭行は「年月,YYYY,MM」を想定（先頭が # のコメントでも許容）
       const lines = text.split(/\r?\n/);
-      const firstNonEmpty = (lines.find(l => l.trim() !== "") || "").trim().replace(/^#\s?/, "");
-      const parts = firstNonEmpty.split(",").map(s => s.trim());
+      const firstNonComment = (lines.find(l => l.trim() !== "" && !l.trim().startsWith("#")) || "").trim();
+      const parts = firstNonComment.split(",").map(s => s.trim());
       if (parts.length >= 3 && parts[0] === "年月") {
         const y = parts[1];
         const m = String(parts[2]).padStart(2, "0");
@@ -149,7 +142,7 @@
       const url = `${gasUrl}?action=overwrite&folder=${encodeURIComponent(folderKeyword)}&filename=${encodeURIComponent(targetFilename)}`;
 
       try {
-        setBusy(true); // ★ スピナー表示開始
+        setBusy(true); // スピナーON
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
@@ -166,7 +159,7 @@
       } catch (err) {
         showMessage("通信エラー：" + err.message, "error");
       } finally {
-        setBusy(false); // ★ スピナー非表示
+        setBusy(false); // スピナーOFF
       }
     });
   </script>
