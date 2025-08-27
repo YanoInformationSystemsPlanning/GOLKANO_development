@@ -1,1 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <title>シフト希望確認準備</title>
+  <style>
+    :root { --fg:#222; --muted:#666; --ok:#28a745; --error:#d9534f; --primary:#2b7cff; }
+    html,body { margin:0; padding:0; font-family:sans-serif; background:#f7f7f7; color:var(--fg); }
+    header { display:flex; align-items:center; gap:10px; padding:10px; background:#f0f0f0; border-bottom:1px solid #ddd; }
+    header h1 { font-size:18px; margin:0; }
+    main { max-width:980px; margin:18px auto 48px; padding:0 12px; }
+    .btn { appearance:none; border:none; border-radius:8px; padding:10px 14px; font-size:15px; color:#fff; background:var(--primary); cursor:pointer; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    textarea { width:100%; box-sizing:border-box; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; line-height:1.5; border-radius:10px; border:1px solid #ddd; padding:12px; background:#fff; }
+    .msg { margin-top:12px; padding:10px 12px; border-radius:8px; font-size:14px; display:none; }
+    .msg.ok { display:block; background:#e7f6ec; color:#0f5132; border:1px solid #badbcc; }
+    .msg.error { display:block; background:#fdecea; color:#842029; border:1px solid #f5c2c0; }
+    .spinner { width:14px; height:14px; border-radius:50%; border:3px solid #eaeaea; border-top:3px solid var(--primary); animation:spin 1s linear infinite; display:inline-block; vertical-align:-2px; margin-right:6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #version { margin-top:10px; text-align:left; color:#444; }
+    .spacer { height:12px; }
+  </style>
+</head>
+<body>
+  <!-- 1行目 左端：トップに戻る -->
+  <button onclick="location.href='top_menu.html'">トップに戻る</button>
+
+  <!-- 2行目 左：タイトル / 右：データ作成 -->
+  <header>
+    <h1>シフト調整アンケート用入力データ作成</h1>
+    <span style="margin-left:auto"></span>
+    <button id="runBtn" class="btn">データ作成</button>
+  </header>
+
+  <main>
+    <!-- 3行目以降：入力エリア（横100文字・縦35行相当） -->
+    <textarea id="inputArea" cols="100" rows="35"></textarea>
+
+    <div class="spacer"></div>
+
+    <!-- バージョン表記（左詰め Ver.YYYYMM） -->
+    <div id="version">Ver.-</div>
+
+    <!-- メッセージ -->
+    <div id="msg" class="msg"></div>
+  </main>
+
+  <script>
+    // ===== 参考ソースと同じ保存宛先（GAS＋フォルダ） =====
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec"; // shift_aggregate.html と同じ
+    const FOLDER  = "shift_adjustment_survey"; // 同ディレクトリ（Drive 上の同フォルダ）
+    const TARGET_FILENAME = "input_data.txt";  // 常に上書き
+
+    // ===== UI ヘルパ =====
+    const $run = document.getElementById("runBtn");
+    const $msg = document.getElementById("msg");
+    function setBusy(on, text){
+      $run.disabled = on;
+      $run.innerHTML = on ? `<span class="spinner"></span>${text || "処理中..."}` : "データ作成";
+    }
+    function ok(text){ $msg.className="msg ok"; $msg.textContent=text; $msg.style.display="block"; }
+    function ng(text){ $msg.className="msg error"; $msg.textContent=text; $msg.style.display="block"; }
+
+    // ===== 入力例（入力開始で消える “説明文”） =====
+    const example =
+`Excelの「要請数一覧」シートから、「シフト調整アンケート用入力データ」をコピーして貼り付けます。
+入力データは次のようになります。
+年月,YYYY,MM
+日付,01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+曜日,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金,土,日,月,火,水,木,金
+コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+コース名,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,`;
+    const $area = document.getElementById("inputArea");
+    $area.value = example;
+    let exampleActive = true;
+    $area.addEventListener("focus", () => {
+      if (exampleActive && $area.value === example) { $area.value=""; exampleActive=false; }
+    });
+    $area.addEventListener("input", () => {
+      if (exampleActive && $area.value !== example) { exampleActive=false; }
+    });
+
+    // ===== Ver.YYYYMM 表示 =====
+    (function(){
+      const d=new Date(), y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0");
+      document.getElementById("version").textContent = `Ver.${y}${m}`;
+    })();
+
+    // ===== 正規化：行頭/末の半角/全角スペースをトリム、空行は削除 =====
+    function normalize(text){
+      const norm = String(text).replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+      const lines = norm.split("\n").map(l => l.replace(/^[ \u3000]+|[ \u3000]+$/g,""));
+      return lines.filter(l => l !== "");
+    }
+
+    // ===== バリデーション（仕様） =====
+    function validate(lines){
+      if (lines.length < 4) throw new Error("行数が不足しています（4行以上が必要）");
+      if (!/^年月,\d{4},\d{2}$/.test(lines[0])) throw new Error("1行目が「年月,YYYY,MM」ではありません。");
+      if (!/^日付,/.test(lines[1]))           throw new Error("2行目の先頭が「日付,」ではありません。");
+      if (!/^曜日,/.test(lines[2]))           throw new Error("3行目の先頭が「曜日,」ではありません。");
+    }
+
+    // ===== YYYY年MM月 の抽出 =====
+    function extractYyyyMm(lines){
+      const [, yyyy, mm] = lines[0].split(",");
+      return { yyyy, mm };
+    }
+
+    // ===== 保存（GAS overwrite 同等：参考ソースと同じ呼び出し） =====
+    async function saveToDrive(text){
+      const url = `${GAS_URL}?action=overwrite&folder=${encodeURIComponent(FOLDER)}&filename=${encodeURIComponent(TARGET_FILENAME)}`;
+      const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"text/plain" }, body:text });
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok || !data || data.result !== "success"){
+        throw new Error(data && data.message ? data.message : `HTTP ${res.status}`);
+      }
+    }
+
+    // ===== 実行ボタン =====
+    document.getElementById("runBtn").addEventListener("click", async () => {
+      $msg.style.display="none"; $msg.textContent="";
+      try{
+        setBusy(true, "処理中...");
+        if (exampleActive && $area.value === example){ $area.value=""; exampleActive=false; }
+
+        const lines = normalize($area.value);
+        validate(lines);
+        const { yyyy, mm } = extractYyyyMm(lines);
+
+        // そのまま出力（正規化済）
+        const outText = lines.join("\n");
+
+        await saveToDrive(outText); // Drive の shift_adjustment_survey/input_data.txt へ上書き
+
+        ok(`${yyyy}年${mm}月対応 シフト調整アンケート用入力データの作成が完了しました。`);
+        setTimeout(() => { $msg.style.display="none"; }, 7000); // 7秒キープ
+      } catch(err){
+        alert((err && err.message) ? err.message + "\n\n入力データを見直してください。" : "入力データに誤りがあります。入力データを見直してください。");
+        $area.focus();
+      } finally {
+        setBusy(false);
+      }
+    });
+  </script>
+</body>
+</html>
 
