@@ -259,6 +259,9 @@
         setBusy(true, "保存中…");
         const { outName, api } = await saveAggregateCsv(yymm, csvText);
 
+        // 5) 正常終了時だけCSV内容を画面に表示
+        logln("\n=== 出力内容（CSVテキスト） ===\n" + csvText);
+
         info(`完了：${outName}\n処理：${api.operation}${api.created===true?"（新規作成）":api.created===false?"（上書き）":""}`);
         setBusy(false, "完了");
       } catch (e) {
