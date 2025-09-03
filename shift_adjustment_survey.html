@@ -40,7 +40,14 @@
 
     .remark-input { width:100%; box-sizing:border-box; height:32px; border:1px solid #bbb; padding:0 6px; font-size:16px; line-height:32px; }
     .remark-input::placeholder { color:#999; }
-  </style>
+  
+/* === Added: Course controls & buttons (display filter UI) === */
+.course-controls { margin:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+#toggleDisplayBtn { padding:6px 10px; font-size:14px; border:1px solid #888; border-radius:6px; }
+.course-buttons { display:flex; flex-wrap:wrap; gap:8px; }
+.course-btn { padding:6px 10px; border:1px solid #888; border-radius:6px; background:#2ecc71; color:#000; font-weight:bold; cursor:pointer; }
+.course-btn.selected { background:#e74c3c; color:#fff; }
+</style>
 </head>
 <body>
   <button onclick="location.href='top_menu.html'">トップに戻る</button>
@@ -53,6 +60,12 @@
   </div>
 
   <div class="grid" id="grid"></div>
+<!-- === Added: Display Toggle button and course name buttons container === -->
+<div id="course-controls" class="course-controls">
+  <button id="toggleDisplayBtn" type="button">表示切替</button>
+  <div id="course-buttons" class="course-buttons" aria-label="コース名ボタン群"></div>
+</div>
+
   <div id="version-label" style="text-align:left; margin:10px;">Ver.20250824c</div>
   <div id="messageBox"></div>
 
@@ -307,5 +320,150 @@ window.addEventListener('orientationchange', () => {
 });
 </script>
 
+
+<script>
+// === Added: Display filter logic (non-destructive; data not modified) ===
+(function(){
+  // Lazy get elements when DOM is ready
+  function byId(id){ return document.getElementById(id); }
+
+  function ensureReady(fn){
+    if (document.readyState === "loading"){
+      document.addEventListener("DOMContentLoaded", fn, {once:true});
+    } else {
+      fn();
+    }
+  }
+
+  ensureReady(function(){
+    const gridEl = byId("grid");
+    const controls = byId("course-controls");
+    const btnWrap = byId("course-buttons");
+    const toggleBtn = byId("toggleDisplayBtn");
+
+    if (!gridEl || !controls || !btnWrap || !toggleBtn){
+      // Required nodes missing; do nothing.
+      return;
+    }
+
+    // Globals that may already exist in the page:
+    // - cellRefs: 2D array of the grid cells [row][col]
+    // We'll work gracefully if they don't exist.
+    const hasCellRefs = (typeof cellRefs !== "undefined" && Array.isArray(cellRefs));
+let courseList = [];                 // [{rowIndex, name}]
+    const courseBtnMap = new Map();      // rowIndex -> button
+
+    function setRowVisibility(rowIndex, visible){
+      if (hasCellRefs){
+        const row = cellRefs[rowIndex] || [];
+        for (const cell of row){ if (cell && cell.style){ cell.style.display = visible ? "" : "none"; } }
+      } else {
+        // Fallback: hide by data-row attribute if present (not expected in original)
+        const rowNodes = gridEl.querySelectorAll('[data-row="'+rowIndex+'"]');
+        rowNodes.forEach(node => node.style.display = visible ? "" : "none");
+      }
+    }
+
+    function renderCourseButtons(){
+      btnWrap.innerHTML = "";
+      courseBtnMap.clear();
+      for (const {rowIndex, name} of courseList){
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "course-btn";
+        b.textContent = name || ("行" + rowIndex);
+        b.addEventListener("click", () => {
+          b.classList.toggle("selected");  // 赤(選択) <-> 緑(未選択)
+        });
+        btnWrap.appendChild(b);
+        courseBtnMap.set(rowIndex, b);
+      }
+    }
+
+    function applyFilterFromButtons(){
+      // Always show header rows 0 and 1
+      setRowVisibility(0, true);
+      setRowVisibility(1, true);
+      for (const {rowIndex} of courseList){
+        const btn = courseBtnMap.get(rowIndex);
+        const show = !!(btn && btn.classList.contains("selected"));
+        setRowVisibility(rowIndex, show);
+      }
+    }
+
+    if (toggleBtn){
+      toggleBtn.addEventListener("click", function(){
+        const ok = window.confirm("表示切替を行いますが宜しいですか。");
+        if (!ok) return;
+        applyFilterFromButtons();
+      });
+    }
+
+    // --- Integration with existing grid build ---
+    // If a global function loadGridFromData exists, wrap it to add our behavior.
+    const origLoad = (typeof loadGridFromData === 'function') ? loadGridFromData : undefined;
+    function buildButtonsFromCurrentGrid(){
+      // Collect course names from the first column of data rows (r >= 2)
+      courseList = [];
+      if (hasCellRefs){
+        for (let r = 2; r < cellRefs.length; r++){
+          const firstCell = cellRefs[r] && cellRefs[r][0];
+          const name = firstCell ? String(firstCell.textContent || "").trim() : "";
+          courseList.push({ rowIndex: r, name }
+// === Added: auto-detect grid build and create buttons (MutationObserver) ===
+let buttonsBuilt = false;
+function canBuildNow(){
+  try{
+    if (typeof cellRefs !== "undefined" && Array.isArray(cellRefs) && cellRefs.length >= 3){
+      // grid has header rows and at least one data row
+      return true;
+    }
+  }catch(e){}
+  const cells = gridEl ? gridEl.querySelectorAll(".cell") : [];
+  return cells.length > 0;
+}
+function tryBuildButtons(){
+  if (buttonsBuilt) return;
+  if (!canBuildNow()) return;
+  try { buildButtonsFromCurrentGrid(); buttonsBuilt = true; } catch(e){}
+}
+// initial attempt
+tryBuildButtons();
+// observe changes under grid
+if (gridEl){
+  const mo = new MutationObserver(() => tryBuildButtons());
+  mo.observe(gridEl, { childList: true, subtree: true });
+  // safety timeout after 5s
+  setTimeout(() => tryBuildButtons(), 5000);
+}
+);
+        }
+      } else {
+        // Fallback: attempt to scan .cell elements (if class exists) - best-effort only
+        const rows = Array.from(gridEl.querySelectorAll(".row"));
+        for (let r = 2; r < rows.length; r++){
+          const firstCell = rows[r].querySelector(".cell");
+          const name = firstCell ? String(firstCell.textContent || "").trim() : "";
+          courseList.push({ rowIndex: r, name });
+        }
+      }
+      renderCourseButtons(); // initial: all green (未選択)
+    }
+
+    if (typeof origLoad === "function"){
+      loadGridFromData = function(){
+        // Call the original to construct the grid
+        const ret = origLoad.apply(this, arguments);
+        // After grid is constructed, gather names and render buttons
+        try { buildButtonsFromCurrentGrid(); } catch(e){ /* no-op */ }
+        return ret;
+      };
+    } else {
+      // If no loader, attempt once after DOM ready (maybe grid already built statically)
+      try { buildButtonsFromCurrentGrid(); } catch(e){ /* no-op */ }
+    }
+  });
+})();
+</script>
 </body>
 </html>
