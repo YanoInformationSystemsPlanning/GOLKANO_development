@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>シフト情報表示</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <style>
+    :root { --fg:#222; --muted:#666; --ok:#28a745; --error:#d9534f; --primary:#2b7cff; --accent:#ff7f0e; }
+    html,body { margin:0; padding:0; font-family:sans-serif; background:#f7f7f7; color:var(--fg); }
+    header { display:flex; align-items:center; gap:10px; padding:10px; background:#f0f0f0; border-bottom:1px solid #ddd; }
+    header h1 { font-size:18px; margin:0; }
+    main { max-width:980px; margin:18px auto 60px; padding:0 12px; }
+    .card { background:#fff; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.06); padding:16px; }
+    .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .btn { appearance:none; border:none; border-radius:8px; padding:10px 14px; font-size:15px; color:#fff; background:var(--primary); cursor:pointer; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#eee; color:#333; }
+    .muted { color:var(--muted); }
+    .spinner { width:14px; height:14px; border-radius:50%; border:3px solid #eaeaea; border-top:3px solid var(--primary); animation:spin 1s linear infinite; display:inline-block; vertical-align:-2px; margin-right:6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg { margin-top:12px; padding:10px 12px; border-radius:8px; font-size:14px; display:none; }
+    .msg.ok { display:block; background:#e7f6ec; color:#0f5132; border:1px solid #badbcc; }
+    .msg.error { display:block; background:#fdecea; color:#842029; border:1px solid #f5c2c0; }
+    .note { font-size:12px; color:#555; margin-top:8px; }
+
+    /* ファイルボタンリスト */
+    #fileList { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:10px; }
+    .filebtn { display:flex; align-items:center; justify-content:space-between; width:100%; padding:10px 12px; border:1px solid #e3e3e3; border-radius:10px; background:#fafafa; cursor:pointer; }
+    .filebtn:hover { background:#f2f7ff; border-color:#d9e6ff; }
+    .filebtn .name { font-size:14px; }
+    .filebtn .ym { font-size:12px; color:#555; }
+
+    /* 表 */
+    table { border-collapse:separate; border-spacing:0; width:100%; font-size:14px; }
+    thead th { position:sticky; top:0; background:#f8fbff; }
+    th, td { border:1px solid #e5e5e5; padding:6px 8px; text-align:left; }
+    tbody tr:nth-child(even) { background:#fcfcfc; }
+    .w-date { width:90px; }
+    .w-week { width:60px; }
+    .w-work { width:240px; }
+    .w-remark { width:240px; }
+    .w-choco { width:90px; }
+    .weekend { color:#d63333; font-weight:600; }
+    .holiday { color:var(--accent); font-weight:700; }
+
+    .title { font-weight:700; margin:6px 0 10px; }
+  </style>
+</head>
+<body>
+  <button onclick="location.href='top_menu.html'">トップに戻る</button>
+
+  <header>
+    <h1>シフト情報表示</h1>
+    <span id="userInfo" class="pill"></span>
+    <span id="status" class="muted" style="margin-left:auto;">準備完了</span>
+  </header>
+
+  <main>
+    <!-- ファイル選択カード -->
+    <div class="card">
+      <div class="row">
+        <button id="reloadBtn" class="btn">一覧を更新</button>
+        <span class="muted">マイドライブ/ GOLKANO_work / shift_management</span>
+      </div>
+      <div id="msg" class="msg"></div>
+      <div id="fileMeta" class="note"></div>
+      <div id="fileList"></div>
+    </div>
+
+    <!-- 表示カード -->
+    <div class="card" style="margin-top:14px;">
+      <div id="viewTitle" class="title"></div>
+      <div class="note">・日付が祝日の場合は<strong style="color:var(--accent)">オレンジ</strong>、曜日が土日なら<strong style="color:#d63333">赤</strong>で表示します。</div>
+      <div style="overflow:auto; margin-top:8px;">
+        <table id="shiftTable" aria-label="シフト情報表">
+          <thead>
+            <tr>
+              <th class="w-date">日付</th>
+              <th class="w-week">曜日</th>
+              <th class="w-work">業務</th>
+              <th class="w-remark">備考</th>
+              <th class="w-choco">チョコ券</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="log" class="note" style="white-space:pre-wrap; margin-top:8px;"></div>
+    </div>
+  </main>
+
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250903a</div>
+
+  <script>
+    // ===== 設定（GAS 側のlist/readが使えることを想定） =====
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec"; // shift_aggregate.html と同一
+    // Windows表記: マイドライブ\GOLKANO_work\shift_management → GAS にはスラッシュ区切りで渡します
+    const FOLDER_PATH = "GOLKANO_work/shift_management";
+
+    // ===== 要素参照 =====
+    const $reload  = document.getElementById("reloadBtn");
+    const $fileList= document.getElementById("fileList");
+    const $fileMeta= document.getElementById("fileMeta");
+    const $msg     = document.getElementById("msg");
+    const $status  = document.getElementById("status");
+    const $userInfo= document.getElementById("userInfo");
+    const $viewTitle=document.getElementById("viewTitle");
+    const $tbody   = document.getElementById("tbody");
+    const $log     = document.getElementById("log");
+
+    function setBusy(on, text){
+      $reload.disabled = on;
+      $status.innerHTML = on ? `<span class="spinner"></span>${text||"処理中…"}` : (text || "準備完了");
+    }
+    function info(t){ $msg.className = "msg ok"; $msg.textContent = t; $msg.style.display = "block"; }
+    function err (t){ $msg.className = "msg error"; $msg.textContent = t; $msg.style.display = "block"; }
+    function clearMsg(){ $msg.style.display = "none"; $msg.textContent = ""; }
+
+    // ===== ログイン表示（localStorage: userName / userRole） =====
+    (function initUser(){
+      const name = localStorage.getItem("userName") || "";
+      const role = (localStorage.getItem("userRole") || "").toLowerCase();
+      if (name) $userInfo.textContent = `${name}${role?"（"+role+"）":""}`; else $userInfo.textContent = "(未ログイン)";
+    })();
+
+    // ===== CSV パーサ（RFC4180 相当の簡易版） =====
+    function parseCSV(text){
+      const rows = [];
+      let i = 0, field = '', row = [], inQuotes = false;
+      const s = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      while (i < s.length){
+        const c = s[i];
+        if (inQuotes){
+          if (c === '"'){
+            if (s[i+1] === '"'){ field += '"'; i += 2; continue; }
+            inQuotes = false; i++; continue;
+          } else { field += c; i++; continue; }
+        } else {
+          if (c === '"'){ inQuotes = true; i++; continue; }
+          if (c === ','){ row.push(field); field=''; i++; continue; }
+          if (c === '\n'){ row.push(field); rows.push(row); field=''; row=[]; i++; continue; }
+          field += c; i++;
+        }
+      }
+      row.push(field); rows.push(row);
+      return rows;
+    }
+
+    // ===== Drive 一覧取得 → 条件抽出（"GOLKANOシフト情報" と "csv" を含む） =====
+    async function listFiles(){
+      const url = `${GAS_URL}?action=list&folder=${encodeURIComponent(FOLDER_PATH)}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`list 失敗: HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.result !== 'success' || !Array.isArray(data.files)) throw new Error('list 形式エラー');
+      // フィルタ：両方を含む（大文字小文字は無視）
+      const flt = data.files.filter(n => /GOLKANOシフト情報/i.test(n) && /csv$/i.test(n));
+      return flt;
+    }
+
+    // ===== 編集ルール：YYYY年MM月_シフト情報_nn.csv を表示名として付与 =====
+    function buildDisplayMap(files){
+      // 1) YYYY年MM月 を抽出
+      const rx = /(\d{4})年(\d{1,2})月/;
+      const items = files.map(name => {
+        const m = name.match(rx);
+        const y = m ? m[1] : '0000';
+        const M = m ? String(parseInt(m[2],10)).padStart(2,'0') : '00';
+        const ym = `${y}${M}`;
+        return { name, year:y, month:M, ym };
+      });
+      // 2) ym, name でソート（ym 降順→name 昇順）
+      items.sort((a,b)=> b.ym.localeCompare(a.ym) || a.name.localeCompare(b.name));
+      // 3) 同一 ym で通し番号 nn を付与
+      const counters = new Map();
+      const mapped = items.map(it => {
+        const n = (counters.get(it.ym) || 0) + 1; counters.set(it.ym, n);
+        const disp = `${it.year}年${it.month}月_シフト情報_${String(n).padStart(2,'0')}.csv`;
+        return { display: disp, ym: it.ym, year: it.year, month: it.month, name: it.name };
+      });
+      return mapped;
+    }
+
+    // ===== 祝日フラグ起点の表生成 =====
+    function renderTable(rows, loginName){
+      // 2列目=祝日フラグを探す
+      const idxHoliday = rows.findIndex(r => (r[1]||'').trim() === '祝日フラグ');
+      if (idxHoliday <= 0 || idxHoliday+1 >= rows.length) throw new Error('祝日フラグ行が見つからない、または周辺行が不足');
+
+      const rowDate    = rows[idxHoliday - 1] || [];
+      const rowHoliday = rows[idxHoliday]     || [];
+      const rowWeek    = rows[idxHoliday + 1] || [];
+
+      const yearLabel  = (rows[idxHoliday - 1]?.[1] || '').trim(); // 例: "2025年"
+      const monthLabel = (rows[idxHoliday + 1]?.[1] || '').trim(); // 例: "08月"
+
+      const year = (yearLabel.match(/\d{4}/)||[''])[0];
+      const month= (monthLabel.match(/\d{1,2}/)||[''])[0].padStart(2,'0');
+
+      // ログインユーザの3行（業務、備考、チョコ券）
+      const uIdx = rows.findIndex(r => (r[1]||'').trim() === (loginName||''));
+      if (uIdx < 0) throw new Error(`ログインユーザ「${loginName}」の行が見つかりません。`);
+      const rowWork   = rows[uIdx]     || [];
+      const rowRemark = rows[uIdx + 1] || [];
+      const rowChoco  = rows[uIdx + 2] || [];
+
+      // 有効な日数（右端）を推定
+      const startCol = 3; // 4列目〜
+      let last = startCol - 1;
+      const maxCols = Math.max(rowDate.length, rowWeek.length, rowWork.length, rowRemark.length, rowChoco.length, rowHoliday.length);
+      for (let c = startCol; c < maxCols; c++){
+        const v = (rowDate[c]||rowWeek[c]||rowWork[c]||rowRemark[c]||rowChoco[c]||rowHoliday[c]||'').toString().trim();
+        if (v !== '') last = c;
+      }
+      if (last < startCol) throw new Error('日付列が見つかりません。');
+
+      // タイトル
+      const user = loginName || '(未設定)';
+      document.getElementById('viewTitle').textContent = `${user} ${year}年${month}月 シフト表`;
+
+      // 表本体
+      const $tb = $tbody; $tb.innerHTML = '';
+      for (let c = startCol; c <= last; c++){
+        const d  = (rowDate[c]||'').trim();
+        const w  = (rowWeek[c]||'').trim();
+        const wf = (rowHoliday[c]||'').trim(); // 1なら祝日
+        const work = (rowWork[c]||'').trim();
+        const rem  = (rowRemark[c]||'').trim();
+        const cho  = (rowChoco[c]||'').trim();
+
+        const tr = document.createElement('tr');
+
+        const tdDate = document.createElement('td');
+        tdDate.textContent = d;
+        if (wf === '1') tdDate.classList.add('holiday');
+        tr.appendChild(tdDate);
+
+        const tdWeek = document.createElement('td');
+        tdWeek.textContent = w;
+        if (w === '土' || w === '日') tdWeek.classList.add('weekend');
+        tr.appendChild(tdWeek);
+
+        const tdWork = document.createElement('td'); tdWork.textContent = work; tr.appendChild(tdWork);
+        const tdRem  = document.createElement('td'); tdRem.textContent  = rem;  tr.appendChild(tdRem);
+        const tdCho  = document.createElement('td'); tdCho.textContent  = cho;  tr.appendChild(tdCho);
+
+        $tb.appendChild(tr);
+      }
+    }
+
+    // ===== 1ファイル読取 =====
+    async function readFileText(name){
+      const url = `${GAS_URL}?action=read&folder=${encodeURIComponent(FOLDER_PATH)}&file=${encodeURIComponent(name)}`;
+      const res = await fetch(url, { cache:'no-store' });
+      if (!res.ok) throw new Error(`read 失敗: ${name} / HTTP ${res.status}`);
+      return await res.text();
+    }
+
+    // ===== ファイルボタン描画 =====
+    function renderFileButtons(mapped){
+      $fileList.innerHTML = '';
+      mapped.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = 'filebtn';
+        btn.innerHTML = `<span class="name">${item.display}</span><span class="ym pill">${item.year}年${item.month}月</span>`;
+        btn.addEventListener('click', async () => {
+          const ymText = `${item.year}年${item.month}月`;
+          if (!confirm(`${ymText}のシフト情報を表示しますか？`)) return;
+          clearMsg(); setBusy(true, '読込中…');
+          try {
+            const text = await readFileText(item.name);
+            const rows = parseCSV(text);
+            const loginName = (localStorage.getItem('userName')||'').trim();
+            renderTable(rows, loginName);
+            info(`${item.display} を表示しました。`);
+            setBusy(false, '完了');
+          } catch(e){
+            console.error(e); err(e.message || '表示に失敗しました。'); setBusy(false, '待機中');
+          }
+        });
+        $fileList.appendChild(btn);
+      });
+      $fileMeta.textContent = `${mapped.length} 件`;
+    }
+
+    // ===== 初期化：一覧を取得 =====
+    async function refreshList(){
+      clearMsg(); setBusy(true, '一覧取得中…');
+      $fileList.innerHTML = '';
+      try {
+        const files = await listFiles();
+        if (!files.length){ err('対象ファイルが見つかりません（"GOLKANOシフト情報" を含む CSV）。'); setBusy(false, '待機中'); return; }
+        const mapped = buildDisplayMap(files);
+        renderFileButtons(mapped);
+        info('一覧を更新しました。');
+        setBusy(false, '待機中');
+      } catch(e){ console.error(e); err(e.message || '一覧取得に失敗しました。'); setBusy(false, '待機中'); }
+    }
+
+    document.getElementById('reloadBtn').addEventListener('click', refreshList);
+
+    // ページ初期表示時にも一覧を取得
+    refreshList();
+  </script>
+  <script src="reload.js?v=20250724"></script>
+</body>
+</html>
