@@ -34,7 +34,7 @@
 </head>
 <body>
   <button id="topButton" onclick="location.href='index.html'">ログインに戻る</button>
-  <div class="version-label">Ver.20250822</div>
+  <div class="version-label">Ver.20250822 → Ver.20250903a</div>
 
   <div class="header-area">
     <img src="GOLKANO.ロゴ.png" alt="GOLKANO ロゴ" class="logo" />
@@ -66,12 +66,16 @@
         area.innerHTML = `
           <button class="menu-button admin-button" onclick="location.href='input_data_uploader.html'">シフト希望確認準備</button>
           <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト希望</button>
+          <!-- 追加：シフト表示（シフト希望ボタン直下・同じ属性/挙動。起動先のみ変更） -->
+          <button class="menu-button" onclick="location.href='shift_information_display.html'">シフト表示</button>
           <button class="menu-button admin-button" onclick="location.href='shift_aggregate.html'">シフト希望集約</button>
           <button class="menu-button admin-button" onclick="location.href='ranking_tool.html'">優先順位決め</button>
         `;
       } else {
         area.innerHTML = `
           <button class="menu-button" onclick="location.href='shift_adjustment_survey.html'">シフト希望</button>
+          <!-- 追加：シフト表示（一般ユーザ向け。シフト希望の直下） -->
+          <button class="menu-button" onclick="location.href='shift_information_display.html'">シフト表示</button>
         `;
       }
     })();
@@ -79,6 +83,3 @@
   <script src="reload.js?v=20250724"></script>
 </body>
 </html>
-
-
-
