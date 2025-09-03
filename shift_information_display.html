@@ -25,10 +25,20 @@
     .note { font-size:12px; color:#555; margin-top:8px; }
 
     #fileList { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-top:10px; }
-    .filebtn { display:flex; align-items:center; justify-content:space-between; width:100%; padding:10px 12px; border:1px solid #e3e3e3; border-radius:10px; background:#fafafa; cursor:pointer; }
-    .filebtn:hover { background:#f2f7ff; border-color:#d9e6ff; }
+    .filebtn { display:flex; align-items:center; justify-content:space-between; width:100%; padding:10px 12px; border:1px solid #e3e3e3; border-radius:10px; background:#fafafa; cursor:pointer; transition: background .15s ease, border-color .15s ease, box-shadow .15s ease; }
+    .filebtn:hover { background:#f2f7ff; border-color:#d9e6ff; box-shadow:0 2px 10px rgba(0,0,0,.06); }
     .filebtn .name { font-size:14px; }
     .filebtn .ym { font-size:12px; color:#555; }
+
+    /* === 年月状態に応じた色分け === */
+    .filebtn.past  { background:#eeeeee; border-color:#dddddd; color:#333; }
+    .filebtn.past:hover { background:#e6e6e6; border-color:#cfcfcf; }
+
+    .filebtn.current { background:#ffe5e5; border-color:#ffc2c2; color:#7a1f1f; }
+    .filebtn.current:hover { background:#ffd6d6; border-color:#ffadad; }
+
+    .filebtn.future { background:#e8f6ee; border-color:#cbead9; color:#1e5a39; }
+    .filebtn.future:hover { background:#d9f0e5; border-color:#b9e3d2; }
 
     table { border-collapse:separate; border-spacing:0; width:100%; font-size:14px; }
     thead th { position:sticky; top:0; background:#f8fbff; }
@@ -58,7 +68,7 @@
     <div class="card">
       <div class="row">
         <button id="reloadBtn" class="btn">一覧を更新</button>
-        <span class="muted">folder=<code id="folderLabel"></code></span>
+        <!-- Folder 表示は不要のため削除 -->
       </div>
       <div id="msg" class="msg"></div>
       <div id="fileMeta" class="note"></div>
@@ -86,7 +96,7 @@
     </div>
   </main>
 
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250903</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250904</div>
 
   <script>
     // ===== GAS仕様に準拠 =====
@@ -104,7 +114,6 @@
     const $userInfo = document.getElementById('userInfo');
     const $viewTitle = document.getElementById('viewTitle');
     const $tbody = document.getElementById('tbody');
-    const $folderLabel = document.getElementById('folderLabel');
 
     function setBusy(on, text){
       $reload.disabled = on;
@@ -118,7 +127,6 @@
       const name = localStorage.getItem('userName') || '';
       const role = (localStorage.getItem('userRole') || '').toLowerCase();
       $userInfo.textContent = name ? (name + (role? '（'+role+'）':'')) : '(未ログイン)';
-      $folderLabel.textContent = FOLDER_KEYWORD;
     })();
 
     // ===== 正規化ヘルパ（BOM/全角半角/空白差異に頑健） =====
@@ -161,12 +169,13 @@
 
     function buildDisplayMap(files){
       const rx=/(\d{4})年(\d{1,2})月/;
-      const items = files.map(name=>{
+      // ★ 取得したファイル名を“昇順”（文字列）に統一
+      const items = files.slice().sort((a,b)=> a.localeCompare(b,'ja')).map(name=>{
         const m = name.match(rx);
         const y = m? m[1]:'0000';
         const M = m? String(parseInt(m[2],10)).padStart(2,'0'):'00';
         return { name, year:y, month:M, ym: y+M };
-      }).sort((a,b)=> b.name.localeCompare(a.name));
+      });
       const counters = new Map();
       return items.map(it=>{
         const n = (counters.get(it.ym)||0)+1; counters.set(it.ym,n);
@@ -248,10 +257,20 @@
 
     function renderFileButtons(mapped){
       $fileList.innerHTML='';
+      // 現在の 年月(YYYYMM) を算出
+      const now = new Date();
+      const nowYM = String(now.getFullYear()) + String(now.getMonth()+1).padStart(2,'0');
+
       mapped.forEach(item=>{
         const btn=document.createElement('button');
         btn.className='filebtn';
-        btn.innerHTML=`<span class=\"name\">${item.display}</span><span class=\"ym pill\">${item.year}年${item.month}月</span>`;
+
+        // 年月によりクラスを付与
+        const ym = item.ym; // "YYYYMM"
+        const stateClass = ym < nowYM ? 'past' : (ym === nowYM ? 'current' : 'future');
+        btn.classList.add(stateClass);
+
+        btn.innerHTML=`<span class="name">${item.display}</span><span class="ym pill">${item.year}年${item.month}月</span>`;
         btn.addEventListener('click', async()=>{
           const ymText=`${item.year}年${item.month}月`;
           if(!confirm(`${ymText}のシフト情報を表示しますか？`)) return;
