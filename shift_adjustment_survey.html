@@ -409,34 +409,7 @@ let courseList = [];                 // [{rowIndex, name}]
         for (let r = 2; r < cellRefs.length; r++){
           const firstCell = cellRefs[r] && cellRefs[r][0];
           const name = firstCell ? String(firstCell.textContent || "").trim() : "";
-          courseList.push({ rowIndex: r, name }
-// === Added: auto-detect grid build and create buttons (MutationObserver) ===
-let buttonsBuilt = false;
-function canBuildNow(){
-  try{
-    if (typeof cellRefs !== "undefined" && Array.isArray(cellRefs) && cellRefs.length >= 3){
-      // grid has header rows and at least one data row
-      return true;
-    }
-  }catch(e){}
-  const cells = gridEl ? gridEl.querySelectorAll(".cell") : [];
-  return cells.length > 0;
-}
-function tryBuildButtons(){
-  if (buttonsBuilt) return;
-  if (!canBuildNow()) return;
-  try { buildButtonsFromCurrentGrid(); buttonsBuilt = true; } catch(e){}
-}
-// initial attempt
-tryBuildButtons();
-// observe changes under grid
-if (gridEl){
-  const mo = new MutationObserver(() => tryBuildButtons());
-  mo.observe(gridEl, { childList: true, subtree: true });
-  // safety timeout after 5s
-  setTimeout(() => tryBuildButtons(), 5000);
-}
-);
+          courseList.push({ rowIndex: r, name });
         }
       } else {
         // Fallback: attempt to scan .cell elements (if class exists) - best-effort only
