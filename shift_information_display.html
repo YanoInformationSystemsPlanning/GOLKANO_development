@@ -86,13 +86,13 @@
     </div>
   </main>
 
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250904b</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250904c</div>
 
   <script>
     // ===== GAS仕様に準拠 =====
     // folder は “キーワード” を渡す
     // list は JSON({result, files:string[]})、read は text/plain
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzh4fi1uShyFDZLsGr0F8cduWNqacUTpmIYFZ5VBrC1qbPkzIa8YPDzrlF5_n9N-hVRBg/exec"; // 既存URLと同じにしてください
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzh4fi1uShyFDZLsGr0F8cduWNqacUTpmIYFZ5VBrC1qbPkzIa8YPDzrlF5_n9N-hVRBg/exec"; // アップロード版に合わせる
     const FOLDER_KEYWORD = localStorage.getItem('shiftFolderKeyword') || 'shift_management';
     const CLIENT_PREFIX = '';
 
@@ -120,6 +120,10 @@
       $userInfo.textContent = name ? (name + (role? '（'+role+'）':'')) : '(未ログイン)';
       $folderLabel.textContent = FOLDER_KEYWORD;
     })();
+
+    // ===== 正規化ヘルパ（BOM/全角半角/空白差異に頑健） =====
+    const norm = (s)=> String(s||'').replace(/\uFEFF/g,'').normalize('NFKC').replace(/[ \t\u3000]/g,'').trim();
+    const equals = (a,b)=> norm(a) === norm(b);
 
     function parseCSV(text){
       const rows = [];
@@ -171,15 +175,31 @@
     }
 
     function renderTable(rows, loginName){
-      const idxHoliday = rows.findIndex(r => (r[1]||'').trim()==='祝日フラグ');
+      // --- 「祝日フラグ」行の特定（まず2列目、見つからなければ行内どこでも） ---
+      const target = '祝日フラグ';
+      let idxHoliday = -1;
+      for (let i=0;i<rows.length;i++){
+        if (equals(rows[i][1], target)) { idxHoliday = i; break; }
+      }
+      if (idxHoliday < 0){
+        for (let i=0;i<rows.length && idxHoliday<0;i++){
+          const r = rows[i]||[];
+          for (let j=0;j<r.length;j++){
+            if (equals(r[j], target)) { idxHoliday = i; break; }
+          }
+        }
+      }
       if(idxHoliday<=0 || idxHoliday+1>=rows.length) throw new Error('祝日フラグ行が見つからない、または周辺行が不足');
+
       const rowDate = rows[idxHoliday-1]||[];
       const rowHoliday = rows[idxHoliday]||[];
       const rowWeek = rows[idxHoliday+1]||[];
-      const year = ((rows[idxHoliday-1]?.[1]||'').match(/\d{4}/)||[''])[0];
-      const month = ((rows[idxHoliday+1]?.[1]||'').match(/\d{1,2}/)||[''])[0].padStart(2,'0');
 
-      const uIdx = rows.findIndex(r => (r[1]||'').trim()===(loginName||''));
+      const year = ((rows[idxHoliday-1]?.[1]||'').match(/\d{4}/)||[''])[0]||'';
+      const monthNum = ((rows[idxHoliday+1]?.[1]||'').match(/\d{1,2}/)||[''])[0];
+      const month = monthNum ? String(parseInt(monthNum,10)).padStart(2,'0') : '';
+
+      const uIdx = rows.findIndex(r => equals(r[1], loginName||''));
       if(uIdx<0) throw new Error(`ログインユーザ「${loginName}」の行が見つかりません。`);
       const rowWork = rows[uIdx]||[];
       const rowRemark = rows[uIdx+1]||[];
