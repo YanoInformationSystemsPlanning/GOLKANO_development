@@ -86,14 +86,14 @@
     </div>
   </main>
 
-  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250903b</div>
+  <div id="version-label" style="text-align:left; margin:10px;">Ver.20250904b</div>
 
   <script>
     // ===== GAS仕様に準拠 =====
-    // folder は “キーワード” を渡す: {ranking_tool, shift_adjustment_survey, master_data}
+    // folder は “キーワード” を渡す
     // list は JSON({result, files:string[]})、read は text/plain
     const GAS_URL = "https://script.google.com/macros/s/AKfycby-OWiC-DnfTcHVvEXqdVq0F3-NI4yQHqb8-Vw7iZH1gtPS7MbmP1x1YIhXbiNdPrEUCg/exec"; // 既存URLと同じにしてください
-    const FOLDER_KEYWORD = localStorage.getItem('shiftFolderKeyword') || 'master_data';
+    const FOLDER_KEYWORD = localStorage.getItem('shiftFolderKeyword') || 'shift_management';
     const CLIENT_PREFIX = '';
 
     const $reload = document.getElementById('reloadBtn');
@@ -193,12 +193,17 @@
       }
       if(last<startCol) throw new Error('日付列が見つかりません。');
 
+      // 34列目(0-basedで index=33)までに制限
+      const MAX_COL_INDEX = 33;
+      if(last > MAX_COL_INDEX) last = MAX_COL_INDEX;
+
       const user = loginName || '(未設定)';
       $viewTitle.textContent = `${user} ${year}年${month}月 シフト表`;
 
       $tbody.innerHTML='';
       for(let c=startCol;c<=last;c++){
         const d=(rowDate[c]||'').trim();
+        if(!d) continue; // 日付が空は表示しない（合計等の列を自然に除外）
         const w=(rowWeek[c]||'').trim();
         const wf=(rowHoliday[c]||'').trim();
         const work=(rowWork[c]||'').trim();
