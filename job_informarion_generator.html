@@ -7,12 +7,12 @@
   <meta http-equiv="Cache-Control" content="no-store" />
   <style>
     :root { --fg:#222; --muted:#666; --ok:#28a745; --error:#d9534f; --primary:#2b7cff; --card:#fff; --bg:#f7f7f7; }
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+    html,body{margin:0;padding:0;background:var(--bg);color:#222;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
     header{display:flex;align-items:center;gap:10px;padding:10px;background:#f0f0f0;border-bottom:1px solid #ddd;}
     header .spacer{flex:1;}
     .ver{font-size:12px;color:#333;background:#eee;border-radius:999px;padding:3px 10px;}
     main{max-width:980px;margin:18px auto 60px;padding:0 12px;}
-    .card{background:var(--card);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.06);padding:16px;}
+    .card{background:#fff;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.06);padding:16px;}
     .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
     .btn{appearance:none;border:none;border-radius:10px;padding:10px 14px;font-size:15px;color:#fff;background:var(--primary);cursor:pointer}
     .btn.sub{background:#888}
@@ -38,7 +38,7 @@
   <header>
     <button class="btn sub" onclick="location.href='top_menu.html'">トップに戻る</button>
     <div class="spacer"></div>
-    <span id="version" class="ver">Ver.20250904h</span>
+    <span id="version" class="ver">Ver.20250904i</span>
   </header>
 
   <main>
@@ -48,7 +48,7 @@
         <input id="dateInput" type="text" inputmode="numeric" pattern="\d{8}" placeholder="yyyymmdd" />
         <button id="editBtn" class="btn">業務連絡編集</button>
         <button id="saveBtn" class="btn" disabled>内容保存</button>
-        <!-- 連絡テキスト生成 → メンバ順生成に改称し、右にコース順生成を追加 -->
+        <!-- 生成系：連絡テキスト生成 → メンバ順生成、右にコース順生成（未定義） -->
         <button id="memberBtn" class="btn" disabled>メンバ順生成</button>
         <button id="courseBtn" class="btn" disabled>コース順生成</button>
         <button id="backToTableBtn" class="btn sub right" style="display:none">表に戻す</button>
@@ -82,7 +82,7 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxrnvzng88PDqgnubPyHC1n82EXZn8_zHU9EoAL922BcKwDc4QamCtQlpiaSwdWwS3mNg/exec";
     const JOB_FOLDER   = "job_information";
     const SHIFT_FOLDER = "shift_management";
-    const VERSION = "20250904h";
+    const VERSION = "20250904i";
 
     // ====== 要素 ======
     const $date = document.getElementById('dateInput');
@@ -101,7 +101,7 @@
     let currentMode = 'table';
     let tableReady = false;
 
-    // ヘッダ（5列）
+    // 5列ヘッダ
     const headerRow = ["メンバ","出勤時刻","コース","備考","補足"];
 
     // ====== ユーティリティ ======
@@ -162,7 +162,7 @@
       const url = `${GAS_URL}?action=overwrite&folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(filename)}`;
       const res = await fetch(url,{
         method:'POST',
-        body: '\uFEFF' + text, // BOM付きUTF-8（Excel対策）
+        body: '\uFEFF' + text, // BOM付きUTF-8（Excel文字化け対策）
         cache: 'no-store',
         redirect: 'follow',
         mode: 'cors'
@@ -183,7 +183,7 @@
     }
     function findDateColumn(rows, idxHoliday, dd){
       const rowDate = rows[idxHoliday-1] || [];
-      const startCol = 3;
+      const startCol = 3; // dd+3 列起点
       const candidates = [String(Number(dd,10)), dd.replace(/^0/,'') || dd, dd];
       for(let c=startCol;c<rowDate.length;c++){
         const v = String(rowDate[c]||'').trim();
@@ -199,7 +199,7 @@
       if(col<0) throw new Error(`日付列（${d}日）が見つかりません。`);
 
       const out = [];
-      const startRow = idxHoliday + 2;
+      const startRow = idxHoliday + 2; // 2行下から
       for(let i=0;i<50;i++){
         const r = startRow + i*3;
         const rName = rows[r] || [];
@@ -208,12 +208,12 @@
         if(!rName.length) break;
 
         const name = (rName[1]||'').toString().trim();
-        if(/^\d{4}年/.test(name)) break;
+        if(/^\d{4}年/.test(name)) break; // 年見出しで打切り
 
         if(!name){ out.push(['','','','','']); continue; }
         const course = (rWork[col]||'').toString().trim();
         const note   = (rRmks[col]||'').toString().trim();
-        out.push([name, '', course, note, '']);
+        out.push([name, '', course, note, '']); // 出勤時刻は初期空
       }
       while(out.length<50) out.push(['','','','','']);
       return out.slice(0,50);
@@ -244,36 +244,43 @@
       return rows;
     }
 
-    // ====== 旧4列CSVの互換変換 ======
+    // ====== 旧4列CSVを5列へ補正 ======
     function coerceTo5Cols(rows){
       return rows.map(r=>{
         if(r.length>=5) return [r[0]||'', r[1]||'', r[2]||'', r[3]||'', r[4]||''];
-        return [r[0]||'', '', r[1]||'', r[2]||'', r[3]||''];
+        return [r[0]||'', '', r[1]||'', r[2]||'', r[3]||'']; // 出勤時刻は空
       });
     }
 
-    // ====== 生成（ヘッダ固定／スラッシュ無し／全空行は「─」表示／半角スペース区切り） ======
+    // ====== 生成（ヘッダ固定／行フィルタ＆置換ルール） ======
+    // ・メンバ以外（出勤時刻/コース/備考/補足）が全て空の行は出力しない
+    // ・いずれか埋まっている行は出力。コース/備考/補足の空欄は「─」に置換（出勤時刻は空のまま可）
+    // ・データ行はスラッシュ無し、半角スペース区切り
     function genPlainText(yyyymmdd, bodyRows){
       const title = `${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡`;
       const headerLine = "メンバ /出勤時刻 /コース /備考 /補足";
 
-      // フィルタは行わない（全行を評価）。全項目が空なら「─」を単独表示。
-      const lines = bodyRows.map(r=>{
-        const vals = [
-          String(r[0]||'').trim(),
-          String(r[1]||'').trim(),
-          String(r[2]||'').trim(),
-          String(r[3]||'').trim(),
-          String(r[4]||'').trim()
-        ];
-        const hasAny = vals.some(v => v !== '');
-        return hasAny ? vals.join(' ') : '─';
-      });
+      const lines = [];
+      for (const r of bodyRows) {
+        const member = String(r?.[0] ?? '').trim();
+        const time   = String(r?.[1] ?? '').trim();
+        const course = String(r?.[2] ?? '').trim();
+        const note   = String(r?.[3] ?? '').trim();
+        const extra  = String(r?.[4] ?? '').trim();
 
-      // 末尾の完全空行群は見栄え上、任意で削るなら以下を有効化
-      // while(lines.length && lines[lines.length-1] === '─') lines.pop();
+        const hasAnyNonMember = (time !== '' || course !== '' || note !== '' || extra !== '');
+        if (!hasAnyNonMember) continue; // 非表示
 
-      return `${title}\n${headerLine}\n${lines.join('\n')}`;
+        const outCourse = course || '─';
+        const outNote   = note   || '─';
+        const outExtra  = extra  || '─';
+
+        lines.push([member, time, outCourse, outNote, outExtra].join(' '));
+      }
+
+      return lines.length === 0
+        ? `${title}\n${headerLine}\n(該当なし)`
+        : `${title}\n${headerLine}\n${lines.join('\n')}`;
     }
 
     // ====== 既存CSVの確認/ロード ======
@@ -285,7 +292,7 @@
         if(!confirm('該当ファイルがあるので編集しますか。')) return null;
         const text = await gasRead(JOB_FOLDER, csv);
         const rows = parseCSV(text);
-        const body = coerceTo5Cols(rows.slice(1));
+        const body = coerceTo5Cols(rows.slice(1)); // 先頭はヘッダ
         return body.slice(0,50);
       }else{
         if(!confirm('該当ファイルが無いので新規作成しますか。')) return null;
@@ -316,7 +323,7 @@
     // ====== 初期化 & ハンドラ ======
     (function init(){
       $ver.textContent = `Ver.${VERSION}`;
-      const t = new Date(); t.setDate(t.getDate()+1);
+      const t = new Date(); t.setDate(t.getDate()+1); // 操作日 + 1日
       $date.value = toYmd(t);
 
       $edit.addEventListener('click', async()=>{
@@ -348,14 +355,14 @@
           const rows = [headerRow, ...bodyRows];
           const csv = toCSV(rows);
           const file = `${ymd}_業務連絡.csv`;
-          await gasOverwrite(JOB_FOLDER, file, csv);
+          await gasOverwrite(JOB_FOLDER, file, csv); // 確認なしで上書き
           setBusy(false,'保存完了'); info(`「${file}」として保存しました。`);
         }catch(e){
           console.error(e); err(e.message||'保存に失敗しました。'); setBusy(false,'待機中');
         }
       });
 
-      // メンバ順生成（現行の表順で出力）
+      // メンバ順生成（表の現在順で出力）
       $member.addEventListener('click', ()=>{
         if(!tableReady) return;
         clearMsg();
@@ -372,7 +379,7 @@
         setBusy(false,'テキスト表示中');
       });
 
-      // コース順生成（未定義）
+      // コース順生成（未定義：通知のみ）
       $course.addEventListener('click', ()=>{
         info('「コース順生成」は現時点では未定義です。');
       });
