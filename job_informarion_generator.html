@@ -323,7 +323,7 @@
 
     // ====== コース順：コース（固定順）→時刻→メンバ ======
     function genCourseText(yyyymmdd, bodyRows){
-      const title = `${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡`;
+      const title = `【${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡】`;
 
       // 1) 出力対象抽出（メンバ以外が全空は除外）
       const items = [];
