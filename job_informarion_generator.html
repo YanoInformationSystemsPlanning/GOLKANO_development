@@ -38,7 +38,7 @@
   <header>
     <button class="btn sub" onclick="location.href='top_menu.html'">トップに戻る</button>
     <div class="spacer"></div>
-    <span id="version" class="ver">Ver.20250904f</span>
+    <span id="version" class="ver">Ver.20250904h</span>
   </header>
 
   <main>
@@ -48,7 +48,9 @@
         <input id="dateInput" type="text" inputmode="numeric" pattern="\d{8}" placeholder="yyyymmdd" />
         <button id="editBtn" class="btn">業務連絡編集</button>
         <button id="saveBtn" class="btn" disabled>内容保存</button>
-        <button id="textBtn" class="btn" disabled>連絡テキスト生成</button>
+        <!-- 連絡テキスト生成 → メンバ順生成に改称し、右にコース順生成を追加 -->
+        <button id="memberBtn" class="btn" disabled>メンバ順生成</button>
+        <button id="courseBtn" class="btn" disabled>コース順生成</button>
         <button id="backToTableBtn" class="btn sub right" style="display:none">表に戻す</button>
       </div>
       <div id="msg" class="msg"></div>
@@ -71,7 +73,7 @@
         </table>
         <textarea id="plainText" class="plain" style="display:none"></textarea>
       </div>
-      <div class="note" id="footNote">＊「業務連絡編集」で表を生成後に「内容保存」「連絡テキスト生成」が有効になります。</div>
+      <div class="note" id="footNote">＊「業務連絡編集」で表を生成後に「内容保存」「メンバ順生成」「コース順生成」が有効になります。</div>
     </div>
   </main>
 
@@ -80,13 +82,14 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxrnvzng88PDqgnubPyHC1n82EXZn8_zHU9EoAL922BcKwDc4QamCtQlpiaSwdWwS3mNg/exec";
     const JOB_FOLDER   = "job_information";
     const SHIFT_FOLDER = "shift_management";
-    const VERSION = "20250904f";
+    const VERSION = "20250904h";
 
     // ====== 要素 ======
     const $date = document.getElementById('dateInput');
     const $edit = document.getElementById('editBtn');
     const $save = document.getElementById('saveBtn');
-    const $text = document.getElementById('textBtn');
+    const $member = document.getElementById('memberBtn');
+    const $course = document.getElementById('courseBtn');
     const $back = document.getElementById('backToTableBtn');
     const $msg  = document.getElementById('msg');
     const $stat = document.getElementById('status');
@@ -98,7 +101,7 @@
     let currentMode = 'table';
     let tableReady = false;
 
-    // 新ヘッダ（5列）
+    // ヘッダ（5列）
     const headerRow = ["メンバ","出勤時刻","コース","備考","補足"];
 
     // ====== ユーティリティ ======
@@ -106,7 +109,8 @@
       $stat.innerHTML = on ? '<span class="spinner"></span>'+(text||'処理中…') : (text || '準備完了');
       $edit.disabled = on;
       $save.disabled = on || !tableReady || currentMode!=='table';
-      $text.disabled = on || !tableReady || currentMode!=='table';
+      $member.disabled = on || !tableReady || currentMode!=='table';
+      $course.disabled = on || !tableReady || currentMode!=='table';
       $back.disabled = on || currentMode!=='text';
     }
     function info(t){ $msg.className='msg ok'; $msg.textContent=t; $msg.style.display='block'; }
@@ -117,7 +121,6 @@
     const toYmd = (d)=> `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
 
     function parseCSV(text){
-      // 先頭BOM除去＋CRLF/CRをLF化
       const s = String(text).replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
       const rows=[];let i=0,f='',row=[],q=false;
       while(i<s.length){
@@ -159,8 +162,7 @@
       const url = `${GAS_URL}?action=overwrite&folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(filename)}`;
       const res = await fetch(url,{
         method:'POST',
-        // 単純リクエストでCORSプリフライト回避。本文はBOM付きUTF-8でExcel化け防止。
-        body: '\uFEFF' + text,
+        body: '\uFEFF' + text, // BOM付きUTF-8（Excel対策）
         cache: 'no-store',
         redirect: 'follow',
         mode: 'cors'
@@ -181,7 +183,7 @@
     }
     function findDateColumn(rows, idxHoliday, dd){
       const rowDate = rows[idxHoliday-1] || [];
-      const startCol = 3; // dd+3 列起点
+      const startCol = 3;
       const candidates = [String(Number(dd,10)), dd.replace(/^0/,'') || dd, dd];
       for(let c=startCol;c<rowDate.length;c++){
         const v = String(rowDate[c]||'').trim();
@@ -197,7 +199,7 @@
       if(col<0) throw new Error(`日付列（${d}日）が見つかりません。`);
 
       const out = [];
-      const startRow = idxHoliday + 2; // 「祝日フラグ」行の2行下から
+      const startRow = idxHoliday + 2;
       for(let i=0;i<50;i++){
         const r = startRow + i*3;
         const rName = rows[r] || [];
@@ -206,12 +208,12 @@
         if(!rName.length) break;
 
         const name = (rName[1]||'').toString().trim();
-        if(/^\d{4}年/.test(name)) break; // 年見出しで以降打ち切り
+        if(/^\d{4}年/.test(name)) break;
 
         if(!name){ out.push(['','','','','']); continue; }
-        const course = (rWork[col]||'').toString().trim(); // 旧「業務」→「コース」
-        const note   = (rRmks[col]||'').toString().trim(); // 備考
-        out.push([name, '', course, note, '']); // 出勤時刻 初期設定なし（空）
+        const course = (rWork[col]||'').toString().trim();
+        const note   = (rRmks[col]||'').toString().trim();
+        out.push([name, '', course, note, '']);
       }
       while(out.length<50) out.push(['','','','','']);
       return out.slice(0,50);
@@ -242,106 +244,39 @@
       return rows;
     }
 
-    // ====== 旧4列CSVの互換変換（メンバ,業務,備考,補足 → メンバ,出勤時刻,コース,備考,補足） ======
+    // ====== 旧4列CSVの互換変換 ======
     function coerceTo5Cols(rows){
       return rows.map(r=>{
         if(r.length>=5) return [r[0]||'', r[1]||'', r[2]||'', r[3]||'', r[4]||''];
-        return [r[0]||'', '', r[1]||'', r[2]||'', r[3]||'']; // 出勤時刻は空
+        return [r[0]||'', '', r[1]||'', r[2]||'', r[3]||''];
       });
     }
 
-    // ====== East Asian Width-based 幅計算 ======
-    // 結合文字レンジ: 0幅
-    function isCombining(cp){
-      return (
-        (cp >= 0x0300 && cp <= 0x036F) || // Combining Diacritical Marks
-        (cp >= 0x1AB0 && cp <= 0x1AFF) || // Combining Diacritical Marks Extended
-        (cp >= 0x1DC0 && cp <= 0x1DFF) || // Combining Diacritical Marks Supplement
-        (cp >= 0x20D0 && cp <= 0x20FF) || // Combining Diacritical Marks for Symbols
-        (cp >= 0xFE20 && cp <= 0xFE2F)    // Combining Half Marks
-      );
-    }
-    // East Asian Wide/Fullwidth/emoji等は2、ASCII/半角カナなどは1、制御は0
-    function wcwidthEAW(cp){
-      // 制御やNULL
-      if (cp === 0) return 0;
-      if (cp < 32 || (cp >= 0x7F && cp < 0xA0)) return 0;
-      if (isCombining(cp)) return 0;
-
-      // 明示的に半角扱い（Halfwidth Katakana）
-      if (cp >= 0xFF65 && cp <= 0xFF9F) return 1;
-
-      // East Asian Wide/Fullwidth の代表レンジ
-      if (
-        (cp >= 0x1100 && cp <= 0x115F) || // Hangul Jamo init
-        cp === 0x2329 || cp === 0x232A ||
-        (cp >= 0x2E80 && cp <= 0x2FFF) ||
-        (cp >= 0x3000 && cp <= 0x303F) || // CJK punctuation incl. IDEOGRAPHIC SPACE
-        (cp >= 0x3040 && cp <= 0x30FF) || // Hiragana/Katakana
-        (cp >= 0x3100 && cp <= 0x312F) || // Bopomofo
-        (cp >= 0x3130 && cp <= 0x318F) || // Hangul Jamo
-        (cp >= 0x31A0 && cp <= 0x31BF) || // Bopomofo Extended
-        (cp >= 0x31F0 && cp <= 0x31FF) || // Katakana Phonetic Extensions
-        (cp >= 0x3200 && cp <= 0x33FF) || // Enclosed CJK, CJK Compatibility
-        (cp >= 0x3400 && cp <= 0x4DBF) || // CJK Ext-A
-        (cp >= 0x4E00 && cp <= 0x9FFF) || // CJK Unified Ideographs
-        (cp >= 0xA960 && cp <= 0xA97F) || // Hangul Jamo Extended-A
-        (cp >= 0xAC00 && cp <= 0xD7A3) || // Hangul syllables
-        (cp >= 0xF900 && cp <= 0xFAFF) || // CJK Compatibility Ideographs
-        (cp >= 0xFE10 && cp <= 0xFE19) ||
-        (cp >= 0xFE30 && cp <= 0xFE6F) ||
-        (cp >= 0xFF01 && cp <= 0xFF60) ||
-        (cp >= 0xFFE0 && cp <= 0xFFE6) ||
-        (cp >= 0x1F300 && cp <= 0x1FAFF) || // Emoji等（概ね2幅で扱う）
-        (cp >= 0x20000 && cp <= 0x3FFFD)    // CJK拡張面（概ね2幅）
-      ){
-        return 2;
-      }
-
-      // それ以外は1（Ambiguous は1扱い）
-      return 1;
-    }
-    function displayWidth(str){
-      let w = 0;
-      for (const ch of String(str||"")) {
-        const cp = ch.codePointAt(0);
-        w += wcwidthEAW(cp);
-      }
-      return w;
-    }
-
-    // ヘッダは固定で「メンバ /出勤時刻 /コース /備考 /補足」。
-    // データ行はスラッシュ無し、各項目は半角スペースで区切ってそのまま出力（切り詰め無し）。
+    // ====== 生成（ヘッダ固定／スラッシュ無し／全空行は「─」表示／半角スペース区切り） ======
     function genPlainText(yyyymmdd, bodyRows){
-      const title = `【${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡】`;
+      const title = `${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡`;
       const headerLine = "メンバ /出勤時刻 /コース /備考 /補足";
 
-      // 既定どおり：コース・備考・補足が全て空の行は非表示
-      const eff = bodyRows.filter(r=>{
-        const course = String(r[2]||'').trim();
-        const note   = String(r[3]||'').trim();
-        const extra  = String(r[4]||'').trim();
-        return (course!=='' || note!=='' || extra!=='');
-      });
-
-      const lines = eff.map(r=>{
+      // フィルタは行わない（全行を評価）。全項目が空なら「─」を単独表示。
+      const lines = bodyRows.map(r=>{
         const vals = [
-          String(r[0]||'').trim(), // メンバ
-          String(r[1]||'').trim(), // 出勤時刻
-          String(r[2]||'').trim(), // コース
-          String(r[3]||'').trim(), // 備考
-          String(r[4]||'').trim()  // 補足
+          String(r[0]||'').trim(),
+          String(r[1]||'').trim(),
+          String(r[2]||'').trim(),
+          String(r[3]||'').trim(),
+          String(r[4]||'').trim()
         ];
-        // 半角スペース1つで連結（空欄がある場合はスペースが連続しますが、そのまま仕様）
-        return vals.join(' ');
+        const hasAny = vals.some(v => v !== '');
+        return hasAny ? vals.join(' ') : '─';
       });
 
-      return lines.length === 0
-        ? `${title}\n${headerLine}\n(該当なし)`
-        : `${title}\n${headerLine}\n${lines.join('\n')}`;
+      // 末尾の完全空行群は見栄え上、任意で削るなら以下を有効化
+      // while(lines.length && lines[lines.length-1] === '─') lines.pop();
+
+      return `${title}\n${headerLine}\n${lines.join('\n')}`;
     }
 
-    // ====== 既存CSVの確認/ロード（CSVのみ扱う） ======
+    // ====== 既存CSVの確認/ロード ======
     async function tryLoadExisting(yyyymmdd){
       const files = await gasList(JOB_FOLDER);
       const csv = `${yyyymmdd}_業務連絡.csv`;
@@ -350,7 +285,7 @@
         if(!confirm('該当ファイルがあるので編集しますか。')) return null;
         const text = await gasRead(JOB_FOLDER, csv);
         const rows = parseCSV(text);
-        const body = coerceTo5Cols(rows.slice(1)); // 先頭ヘッダ除去＋5列化
+        const body = coerceTo5Cols(rows.slice(1));
         return body.slice(0,50);
       }else{
         if(!confirm('該当ファイルが無いので新規作成しますか。')) return null;
@@ -358,7 +293,7 @@
       }
     }
 
-    // ====== 新規作成：対象シフトCSVの決定・読込 ======
+    // ====== 新規作成：シフトCSVの決定・読込 ======
     async function buildFromShift(yyyymmdd){
       const files = await gasList(SHIFT_FOLDER);
       const {y,m} = ymdParts(yyyymmdd);
@@ -381,7 +316,7 @@
     // ====== 初期化 & ハンドラ ======
     (function init(){
       $ver.textContent = `Ver.${VERSION}`;
-      const t = new Date(); t.setDate(t.getDate()+1); // 操作日 + 1日
+      const t = new Date(); t.setDate(t.getDate()+1);
       $date.value = toYmd(t);
 
       $edit.addEventListener('click', async()=>{
@@ -396,7 +331,7 @@
           tableReady = true;
           setBusy(false,'編集表を表示中');
           info('編集表を用意しました。セルは直接編集できます。');
-          $save.disabled=false; $text.disabled=false;
+          $save.disabled=false; $member.disabled=false; $course.disabled=false;
         }catch(e){
           console.error(e); err(e.message||'編集準備に失敗しました。'); setBusy(false,'待機中');
         }
@@ -413,14 +348,15 @@
           const rows = [headerRow, ...bodyRows];
           const csv = toCSV(rows);
           const file = `${ymd}_業務連絡.csv`;
-          await gasOverwrite(JOB_FOLDER, file, csv); // 確認なしで上書き
+          await gasOverwrite(JOB_FOLDER, file, csv);
           setBusy(false,'保存完了'); info(`「${file}」として保存しました。`);
         }catch(e){
           console.error(e); err(e.message||'保存に失敗しました。'); setBusy(false,'待機中');
         }
       });
 
-      $text.addEventListener('click', ()=>{
+      // メンバ順生成（現行の表順で出力）
+      $member.addEventListener('click', ()=>{
         if(!tableReady) return;
         clearMsg();
         const box = document.getElementById('editorBox');
@@ -434,6 +370,11 @@
         currentMode = 'text';
         $back.style.display='inline-block';
         setBusy(false,'テキスト表示中');
+      });
+
+      // コース順生成（未定義）
+      $course.addEventListener('click', ()=>{
+        info('「コース順生成」は現時点では未定義です。');
       });
 
       $back.addEventListener('click', ()=>{
