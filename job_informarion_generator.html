@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>業務連絡生成</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <style>
+    :root { --fg:#222; --muted:#666; --ok:#28a745; --error:#d9534f; --primary:#2b7cff; --card:#fff; --bg:#f7f7f7; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+    header{display:flex;align-items:center;gap:10px;padding:10px;background:#f0f0f0;border-bottom:1px solid #ddd;}
+    header .spacer{flex:1;}
+    .ver{font-size:12px;color:#333;background:#eee;border-radius:999px;padding:3px 10px;}
+    main{max-width:980px;margin:18px auto 60px;padding:0 12px;}
+    .card{background:var(--card);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.06);padding:16px;}
+    .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .btn{appearance:none;border:none;border-radius:10px;padding:10px 14px;font-size:15px;color:#fff;background:var(--primary);cursor:pointer}
+    .btn.sub{background:#888}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    label{font-size:14px}
+    input[type="text"]{font-size:15px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;width:120px}
+    .msg{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:14px;display:none}
+    .msg.ok{display:block;background:#e7f6ec;color:#0f5132;border:1px solid #badbcc}
+    .msg.error{display:block;background:#fdecea;color:#842029;border:1px solid #f5c2c0}
+    .muted{color:var(--muted)}
+    .spinner{width:14px;height:14px;border-radius:50%;border:3px solid #eaeaea;border-top:3px solid var(--primary);animation:spin 1s linear infinite;display:inline-block;vertical-align:-2px;margin-right:6px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    table{border-collapse:separate;border-spacing:0;width:100%;font-size:14px}
+    th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:left}
+    thead th{position:sticky;top:0;background:#f8fbff}
+    td[contenteditable="true"]{background:#fffef8;outline:none}
+    .note{font-size:12px;color:#555;margin-top:8px}
+    textarea.plain{width:100%;height:480px;border:1px solid #e5e5e5;border-radius:10px;padding:10px;box-sizing:border-box;font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;font-size:14px;white-space:pre}
+    .right{margin-left:auto}
+  </style>
+</head>
+<body>
+  <header>
+    <button class="btn sub" onclick="location.href='top_menu.html'">トップに戻る</button>
+    <div class="spacer"></div>
+    <span id="version" class="ver">Ver.20250904f</span>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="row">
+        <label for="dateInput"><strong>日付</strong></label>
+        <input id="dateInput" type="text" inputmode="numeric" pattern="\d{8}" placeholder="yyyymmdd" />
+        <button id="editBtn" class="btn">業務連絡編集</button>
+        <button id="saveBtn" class="btn" disabled>内容保存</button>
+        <button id="textBtn" class="btn" disabled>連絡テキスト生成</button>
+        <button id="backToTableBtn" class="btn sub right" style="display:none">表に戻す</button>
+      </div>
+      <div id="msg" class="msg"></div>
+      <div id="status" class="note muted">準備完了</div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <div id="editorBox">
+        <table id="editTable" aria-label="業務連絡編集表">
+          <thead>
+            <tr>
+              <th style="width:200px">メンバ</th>
+              <th style="width:120px">出勤時刻</th>
+              <th style="width:220px">コース</th>
+              <th style="width:220px">備考</th>
+              <th style="width:160px">補足</th>
+            </tr>
+          </thead>
+          <tbody id="editTbody"></tbody>
+        </table>
+        <textarea id="plainText" class="plain" style="display:none"></textarea>
+      </div>
+      <div class="note" id="footNote">＊「業務連絡編集」で表を生成後に「内容保存」「連絡テキスト生成」が有効になります。</div>
+    </div>
+  </main>
+
+  <script>
+    // ====== 設定 ======
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxrnvzng88PDqgnubPyHC1n82EXZn8_zHU9EoAL922BcKwDc4QamCtQlpiaSwdWwS3mNg/exec";
+    const JOB_FOLDER   = "job_information";
+    const SHIFT_FOLDER = "shift_management";
+    const VERSION = "20250904f";
+
+    // ====== 要素 ======
+    const $date = document.getElementById('dateInput');
+    const $edit = document.getElementById('editBtn');
+    const $save = document.getElementById('saveBtn');
+    const $text = document.getElementById('textBtn');
+    const $back = document.getElementById('backToTableBtn');
+    const $msg  = document.getElementById('msg');
+    const $stat = document.getElementById('status');
+    const $tbody= document.getElementById('editTbody');
+    const $table= document.getElementById('editTable');
+    const $plain= document.getElementById('plainText');
+    const $ver  = document.getElementById('version');
+
+    let currentMode = 'table';
+    let tableReady = false;
+
+    // 新ヘッダ（5列）
+    const headerRow = ["メンバ","出勤時刻","コース","備考","補足"];
+
+    // ====== ユーティリティ ======
+    function setBusy(on, text){
+      $stat.innerHTML = on ? '<span class="spinner"></span>'+(text||'処理中…') : (text || '準備完了');
+      $edit.disabled = on;
+      $save.disabled = on || !tableReady || currentMode!=='table';
+      $text.disabled = on || !tableReady || currentMode!=='table';
+      $back.disabled = on || currentMode!=='text';
+    }
+    function info(t){ $msg.className='msg ok'; $msg.textContent=t; $msg.style.display='block'; }
+    function err(t){ $msg.className='msg error'; $msg.textContent=t; $msg.style.display='block'; }
+    function clearMsg(){ $msg.style.display='none'; $msg.textContent=''; }
+    const norm = (s)=> String(s||'').replace(/\uFEFF/g,'').normalize('NFKC').replace(/[ \t\u3000]/g,'').trim();
+    const equals = (a,b)=> norm(a)===norm(b);
+    const toYmd = (d)=> `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+
+    function parseCSV(text){
+      // 先頭BOM除去＋CRLF/CRをLF化
+      const s = String(text).replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+      const rows=[];let i=0,f='',row=[],q=false;
+      while(i<s.length){
+        const c=s[i];
+        if(q){ if(c=='"'){ if(s[i+1]=='"'){f+='"';i+=2;continue;} q=false;i++;continue;} f+=c;i++;continue; }
+        else { if(c=='"'){q=true;i++;continue;} if(c==','){row.push(f);f='';i++;continue;} if(c=='\n'){row.push(f);rows.push(row);f='';row=[];i++;continue;} f+=c;i++; }
+      }
+      row.push(f); rows.push(row); return rows;
+    }
+    function toCSV(rows){
+      return rows.map(r=>r.map(v=>{
+        const s=String(v??''); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+      }).join(',')).join('\r\n');
+    }
+    function ymdParts(yyyymmdd){ return { y:yyyymmdd.slice(0,4), m:yyyymmdd.slice(4,6), d:yyyymmdd.slice(6,8) }; }
+    function weekJP(yyyymmdd){
+      const {y,m,d}=ymdParts(yyyymmdd);
+      const dt=new Date(Number(y), Number(m)-1, Number(d));
+      return ['日','月','火','水','木','金','土'][dt.getDay()];
+    }
+
+    // ====== GAS I/O ======
+    async function gasList(folder, prefix=''){
+      const url = `${GAS_URL}?action=list&folder=${encodeURIComponent(folder)}&prefix=${encodeURIComponent(prefix)}`;
+      const res = await fetch(url,{cache:'no-store'});
+      const raw = await res.text();
+      let data; try{ data=JSON.parse(raw); }catch(e){ throw new Error('list 応答がJSONではありません: '+raw.slice(0,120)+'…'); }
+      if(data.result!=='success') throw new Error('list 失敗'+(data.message?`（GAS: ${data.message}）`:''));
+      if(!Array.isArray(data.files)) throw new Error('list 形式エラー（files が配列ではありません）');
+      return data.files;
+    }
+    async function gasRead(folder, file){
+      const url = `${GAS_URL}?action=read&folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(file)}`;
+      const res = await fetch(url,{cache:'no-store'});
+      if(!res.ok) throw new Error(`read 失敗: ${file} / HTTP ${res.status}`);
+      return await res.text();
+    }
+    async function gasOverwrite(folder, filename, text){
+      const url = `${GAS_URL}?action=overwrite&folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(filename)}`;
+      const res = await fetch(url,{
+        method:'POST',
+        // 単純リクエストでCORSプリフライト回避。本文はBOM付きUTF-8でExcel化け防止。
+        body: '\uFEFF' + text,
+        cache: 'no-store',
+        redirect: 'follow',
+        mode: 'cors'
+      });
+      if(!res.ok) throw new Error(`overwrite HTTP ${res.status}`);
+      const raw = await res.text();
+      let data; try{ data=JSON.parse(raw);}catch(e){ throw new Error('overwrite 応答がJSONではありません: '+raw.slice(0,120)+'…'); }
+      if(data.result!=='success') throw new Error('overwrite 失敗'+(data.message?`（GAS: ${data.message}）`:''));
+      return true;
+    }
+
+    // ====== シフトCSV → 配列（5列：メンバ,出勤時刻,コース,備考,補足） ======
+    function findHolidayRowIndex(rows){
+      const target='祝日フラグ';
+      for(let i=0;i<rows.length;i++){ if(equals(rows[i]?.[1],target)) return i; }
+      for(let i=0;i<rows.length;i++){ const r=rows[i]||[]; for(let j=0;j<r.length;j++){ if(equals(r[j],target)) return i; } }
+      return -1;
+    }
+    function findDateColumn(rows, idxHoliday, dd){
+      const rowDate = rows[idxHoliday-1] || [];
+      const startCol = 3; // dd+3 列起点
+      const candidates = [String(Number(dd,10)), dd.replace(/^0/,'') || dd, dd];
+      for(let c=startCol;c<rowDate.length;c++){
+        const v = String(rowDate[c]||'').trim();
+        if(candidates.includes(v)) return c;
+      }
+      return -1;
+    }
+    function buildJobArrayFromShift(rows, yyyymmdd){
+      const idxHoliday = findHolidayRowIndex(rows);
+      if(idxHoliday<=0) throw new Error('祝日フラグ行が見つかりません。');
+      const {d} = ymdParts(yyyymmdd);
+      const col = findDateColumn(rows, idxHoliday, d);
+      if(col<0) throw new Error(`日付列（${d}日）が見つかりません。`);
+
+      const out = [];
+      const startRow = idxHoliday + 2; // 「祝日フラグ」行の2行下から
+      for(let i=0;i<50;i++){
+        const r = startRow + i*3;
+        const rName = rows[r] || [];
+        const rWork = rows[r] || [];
+        const rRmks = rows[r+1] || [];
+        if(!rName.length) break;
+
+        const name = (rName[1]||'').toString().trim();
+        if(/^\d{4}年/.test(name)) break; // 年見出しで以降打ち切り
+
+        if(!name){ out.push(['','','','','']); continue; }
+        const course = (rWork[col]||'').toString().trim(); // 旧「業務」→「コース」
+        const note   = (rRmks[col]||'').toString().trim(); // 備考
+        out.push([name, '', course, note, '']); // 出勤時刻 初期設定なし（空）
+      }
+      while(out.length<50) out.push(['','','','','']);
+      return out.slice(0,50);
+    }
+
+    // ====== 描画/収集 ======
+    function renderTableBody(rows){
+      $tbody.innerHTML='';
+      rows.forEach((r)=>{
+        const tr=document.createElement('tr');
+        for(let c=0;c<headerRow.length;c++){
+          const td=document.createElement('td');
+          td.contentEditable = "true";
+          td.textContent = r[c] ?? '';
+          if(c===0) td.style.fontWeight='600';
+          tr.appendChild(td);
+        }
+        $tbody.appendChild(tr);
+      });
+    }
+    function collectTableBody(){
+      const rows=[];
+      [...$tbody.querySelectorAll('tr')].forEach(tr=>{
+        const cols=[...tr.querySelectorAll('td')].map(td=>td.textContent.trim());
+        const fixed = [cols[0]||'', cols[1]||'', cols[2]||'', cols[3]||'', cols[4]||''];
+        rows.push(fixed);
+      });
+      return rows;
+    }
+
+    // ====== 旧4列CSVの互換変換（メンバ,業務,備考,補足 → メンバ,出勤時刻,コース,備考,補足） ======
+    function coerceTo5Cols(rows){
+      return rows.map(r=>{
+        if(r.length>=5) return [r[0]||'', r[1]||'', r[2]||'', r[3]||'', r[4]||''];
+        return [r[0]||'', '', r[1]||'', r[2]||'', r[3]||'']; // 出勤時刻は空
+      });
+    }
+
+    // ====== East Asian Width-based 幅計算 ======
+    // 結合文字レンジ: 0幅
+    function isCombining(cp){
+      return (
+        (cp >= 0x0300 && cp <= 0x036F) || // Combining Diacritical Marks
+        (cp >= 0x1AB0 && cp <= 0x1AFF) || // Combining Diacritical Marks Extended
+        (cp >= 0x1DC0 && cp <= 0x1DFF) || // Combining Diacritical Marks Supplement
+        (cp >= 0x20D0 && cp <= 0x20FF) || // Combining Diacritical Marks for Symbols
+        (cp >= 0xFE20 && cp <= 0xFE2F)    // Combining Half Marks
+      );
+    }
+    // East Asian Wide/Fullwidth/emoji等は2、ASCII/半角カナなどは1、制御は0
+    function wcwidthEAW(cp){
+      // 制御やNULL
+      if (cp === 0) return 0;
+      if (cp < 32 || (cp >= 0x7F && cp < 0xA0)) return 0;
+      if (isCombining(cp)) return 0;
+
+      // 明示的に半角扱い（Halfwidth Katakana）
+      if (cp >= 0xFF65 && cp <= 0xFF9F) return 1;
+
+      // East Asian Wide/Fullwidth の代表レンジ
+      if (
+        (cp >= 0x1100 && cp <= 0x115F) || // Hangul Jamo init
+        cp === 0x2329 || cp === 0x232A ||
+        (cp >= 0x2E80 && cp <= 0x2FFF) ||
+        (cp >= 0x3000 && cp <= 0x303F) || // CJK punctuation incl. IDEOGRAPHIC SPACE
+        (cp >= 0x3040 && cp <= 0x30FF) || // Hiragana/Katakana
+        (cp >= 0x3100 && cp <= 0x312F) || // Bopomofo
+        (cp >= 0x3130 && cp <= 0x318F) || // Hangul Jamo
+        (cp >= 0x31A0 && cp <= 0x31BF) || // Bopomofo Extended
+        (cp >= 0x31F0 && cp <= 0x31FF) || // Katakana Phonetic Extensions
+        (cp >= 0x3200 && cp <= 0x33FF) || // Enclosed CJK, CJK Compatibility
+        (cp >= 0x3400 && cp <= 0x4DBF) || // CJK Ext-A
+        (cp >= 0x4E00 && cp <= 0x9FFF) || // CJK Unified Ideographs
+        (cp >= 0xA960 && cp <= 0xA97F) || // Hangul Jamo Extended-A
+        (cp >= 0xAC00 && cp <= 0xD7A3) || // Hangul syllables
+        (cp >= 0xF900 && cp <= 0xFAFF) || // CJK Compatibility Ideographs
+        (cp >= 0xFE10 && cp <= 0xFE19) ||
+        (cp >= 0xFE30 && cp <= 0xFE6F) ||
+        (cp >= 0xFF01 && cp <= 0xFF60) ||
+        (cp >= 0xFFE0 && cp <= 0xFFE6) ||
+        (cp >= 0x1F300 && cp <= 0x1FAFF) || // Emoji等（概ね2幅で扱う）
+        (cp >= 0x20000 && cp <= 0x3FFFD)    // CJK拡張面（概ね2幅）
+      ){
+        return 2;
+      }
+
+      // それ以外は1（Ambiguous は1扱い）
+      return 1;
+    }
+    function displayWidth(str){
+      let w = 0;
+      for (const ch of String(str||"")) {
+        const cp = ch.codePointAt(0);
+        w += wcwidthEAW(cp);
+      }
+      return w;
+    }
+
+    // ヘッダは固定で「メンバ /出勤時刻 /コース /備考 /補足」。
+    // データ行はスラッシュ無し、各項目は半角スペースで区切ってそのまま出力（切り詰め無し）。
+    function genPlainText(yyyymmdd, bodyRows){
+      const title = `【${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡】`;
+      const headerLine = "メンバ /出勤時刻 /コース /備考 /補足";
+
+      // 既定どおり：コース・備考・補足が全て空の行は非表示
+      const eff = bodyRows.filter(r=>{
+        const course = String(r[2]||'').trim();
+        const note   = String(r[3]||'').trim();
+        const extra  = String(r[4]||'').trim();
+        return (course!=='' || note!=='' || extra!=='');
+      });
+
+      const lines = eff.map(r=>{
+        const vals = [
+          String(r[0]||'').trim(), // メンバ
+          String(r[1]||'').trim(), // 出勤時刻
+          String(r[2]||'').trim(), // コース
+          String(r[3]||'').trim(), // 備考
+          String(r[4]||'').trim()  // 補足
+        ];
+        // 半角スペース1つで連結（空欄がある場合はスペースが連続しますが、そのまま仕様）
+        return vals.join(' ');
+      });
+
+      return lines.length === 0
+        ? `${title}\n${headerLine}\n(該当なし)`
+        : `${title}\n${headerLine}\n${lines.join('\n')}`;
+    }
+
+    // ====== 既存CSVの確認/ロード（CSVのみ扱う） ======
+    async function tryLoadExisting(yyyymmdd){
+      const files = await gasList(JOB_FOLDER);
+      const csv = `${yyyymmdd}_業務連絡.csv`;
+      const hasCsv = files.includes(csv);
+      if(hasCsv){
+        if(!confirm('該当ファイルがあるので編集しますか。')) return null;
+        const text = await gasRead(JOB_FOLDER, csv);
+        const rows = parseCSV(text);
+        const body = coerceTo5Cols(rows.slice(1)); // 先頭ヘッダ除去＋5列化
+        return body.slice(0,50);
+      }else{
+        if(!confirm('該当ファイルが無いので新規作成しますか。')) return null;
+        return undefined;
+      }
+    }
+
+    // ====== 新規作成：対象シフトCSVの決定・読込 ======
+    async function buildFromShift(yyyymmdd){
+      const files = await gasList(SHIFT_FOLDER);
+      const {y,m} = ymdParts(yyyymmdd);
+      const monthPrefix = `${Number(y)}年${String(Number(m)).padStart(2,'0')}月 GOLKANOシフト情報`;
+      const candidates = files.filter(n => n.startsWith(monthPrefix) && /\.csv$/i.test(n));
+      let target;
+      if(candidates.length){
+        target = candidates.sort((a,b)=> b.localeCompare(a,'ja'))[0];
+      }else{
+        const all = files.filter(n => /GOLKANOシフト情報/.test(n) && /\.csv$/i.test(n));
+        if(!all.length) throw new Error('シフトCSVが見つかりませんでした。');
+        target = all.sort((a,b)=> b.localeCompare(a,'ja'))[0];
+        info('当月ファイルが見つからないため、最新のシフトCSVから作成します。');
+      }
+      const text = await gasRead(SHIFT_FOLDER, target);
+      const rows = parseCSV(text);
+      return buildJobArrayFromShift(rows, yyyymmdd);
+    }
+
+    // ====== 初期化 & ハンドラ ======
+    (function init(){
+      $ver.textContent = `Ver.${VERSION}`;
+      const t = new Date(); t.setDate(t.getDate()+1); // 操作日 + 1日
+      $date.value = toYmd(t);
+
+      $edit.addEventListener('click', async()=>{
+        clearMsg(); setBusy(true,'編集中データの準備…');
+        try{
+          const ymd = ($date.value||'').trim();
+          if(!/^\d{8}$/.test(ymd)) throw new Error('日付は yyyymmdd の8桁で入力してください。');
+          const exist = await tryLoadExisting(ymd);
+          if(exist===null){ setBusy(false,'待機中'); return; }
+          const arr = Array.isArray(exist) ? exist : await buildFromShift(ymd);
+          renderTableBody(arr);
+          tableReady = true;
+          setBusy(false,'編集表を表示中');
+          info('編集表を用意しました。セルは直接編集できます。');
+          $save.disabled=false; $text.disabled=false;
+        }catch(e){
+          console.error(e); err(e.message||'編集準備に失敗しました。'); setBusy(false,'待機中');
+        }
+      });
+
+      $save.addEventListener('click', async()=>{
+        if(!$save.disabled && currentMode!=='table'){ err('テキスト表示中は保存できません。表に戻してください。'); return; }
+        if(!tableReady) return;
+        clearMsg(); setBusy(true,'CSV保存中…');
+        try{
+          const ymd = ($date.value||'').trim();
+          if(!/^\d{8}$/.test(ymd)) throw new Error('日付が不正です。');
+          const bodyRows = collectTableBody();
+          const rows = [headerRow, ...bodyRows];
+          const csv = toCSV(rows);
+          const file = `${ymd}_業務連絡.csv`;
+          await gasOverwrite(JOB_FOLDER, file, csv); // 確認なしで上書き
+          setBusy(false,'保存完了'); info(`「${file}」として保存しました。`);
+        }catch(e){
+          console.error(e); err(e.message||'保存に失敗しました。'); setBusy(false,'待機中');
+        }
+      });
+
+      $text.addEventListener('click', ()=>{
+        if(!tableReady) return;
+        clearMsg();
+        const box = document.getElementById('editorBox');
+        const h = box.offsetHeight;
+        $table.style.display='none';
+        $plain.style.display='block';
+        $plain.style.height = (h-20)+'px';
+        const ymd = ($date.value||'').trim();
+        const bodyRows = collectTableBody();
+        $plain.value = genPlainText(ymd, bodyRows);
+        currentMode = 'text';
+        $back.style.display='inline-block';
+        setBusy(false,'テキスト表示中');
+      });
+
+      $back.addEventListener('click', ()=>{
+        $plain.style.display='none';
+        $table.style.display='';
+        currentMode='table';
+        $back.style.display='none';
+        setBusy(false,'編集表を表示中');
+      });
+    })();
+  </script>
+</body>
+</html>
