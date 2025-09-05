@@ -38,7 +38,7 @@
   <header>
     <button class="btn sub" onclick="location.href='top_menu.html'">トップに戻る</button>
     <div class="spacer"></div>
-    <span id="version" class="ver">Ver.20250904k</span>
+    <span id="version" class="ver">Ver.20250905a</span>
   </header>
 
   <main>
@@ -62,8 +62,9 @@
           <thead>
             <tr>
               <th style="width:200px">メンバ</th>
-              <th style="width:120px">出勤時刻</th>
-              <th style="width:220px">コース</th>
+              <th style="width:110px">時刻</th>
+              <th style="width:90px">修飾</th>
+              <th style="width:200px">コース</th>
               <th style="width:220px">備考</th>
               <th style="width:160px">補足</th>
             </tr>
@@ -81,9 +82,9 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxrnvzng88PDqgnubPyHC1n82EXZn8_zHU9EoAL922BcKwDc4QamCtQlpiaSwdWwS3mNg/exec";
     const JOB_FOLDER   = "job_information";
     const SHIFT_FOLDER = "shift_management";
-    const VERSION = "20250904k";
+    const VERSION = "20250905a";
 
-    // === 変更点: コース表示順の固定定義＋正規化/別名対応 ===
+    // === コース固定順 & 正規化（前版を踏襲） ===
     const UNSET_LABEL = '（コース未設定）';
     const COURSE_ORDER = [
       '仙石','湖畔','大箱根','川国','東名','磯子','湯本','厚国','三甲','朝霧','若洲','清川','相模'
@@ -92,10 +93,8 @@
     function courseCanon(s){
       const n = courseNorm(s);
       const alias = new Map([
-        ['川国の','川国'],        // 表記ゆれ吸収（必要に応じて増やせます）
-        ['厚木国際','厚国'],
-        ['厚木国際ＣＣ','厚国'],
-        ['厚木国際CC','厚国']
+        ['川国の','川国'],
+        ['厚木国際','厚国'], ['厚木国際ＣＣ','厚国'], ['厚木国際CC','厚国'],
       ]);
       const v = alias.get(n) || n;
       return v || UNSET_LABEL;
@@ -119,8 +118,8 @@
     let currentMode = 'table';
     let tableReady = false;
 
-    // 5列ヘッダ
-    const headerRow = ["メンバ","出勤時刻","コース","備考","補足"];
+    // ====== ヘッダ（6列） ======
+    const headerRow = ["メンバ","時刻","修飾","コース","備考","補足"];
 
     // ====== ユーティリティ ======
     function setBusy(on, text){
@@ -143,6 +142,7 @@
       return ['日','月','火','水','木','金','土'][dt.getDay()];
     }
 
+    // ====== CSVユーティリティ ======
     function parseCSV(text){
       const s = String(text).replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
       const rows=[];let i=0,f='',row=[],q=false;
@@ -179,7 +179,7 @@
       const url = `${GAS_URL}?action=overwrite&folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(filename)}`;
       const res = await fetch(url,{
         method:'POST',
-        body: '\uFEFF' + text, // BOM付きUTF-8（Excel文字化け対策）
+        body: '\uFEFF' + text, // BOM付きUTF-8（Excel対策）
         cache: 'no-store',
         redirect: 'follow',
         mode: 'cors'
@@ -191,7 +191,7 @@
       return true;
     }
 
-    // ====== シフトCSV → 配列（5列：メンバ,出勤時刻,コース,備考,補足） ======
+    // ====== シフトCSV → 配列（6列：メンバ,時刻,修飾,コース,備考,補足） ======
     function equals(a,b){ return norm(a)===norm(b); }
     function findHolidayRowIndex(rows){
       const target='祝日フラグ';
@@ -209,7 +209,6 @@
       }
       return -1;
     }
-    function ymdParts(yyyymmdd){ return { y:yyyymmdd.slice(0,4), m:yyyymmdd.slice(4,6), d:yyyymmdd.slice(6,8) }; }
     function buildJobArrayFromShift(rows, yyyymmdd){
       const idxHoliday = findHolidayRowIndex(rows);
       if(idxHoliday<=0) throw new Error('祝日フラグ行が見つかりません。');
@@ -229,12 +228,14 @@
         const name = (rName[1]||'').toString().trim();
         if(/^\d{4}年/.test(name)) break; // 年見出しで打切り
 
-        if(!name){ out.push(['','','','','']); continue; }
         const course = (rWork[col]||'').toString().trim();
         const note   = (rRmks[col]||'').toString().trim();
-        out.push([name, '', course, note, '']); // 出勤時刻 初期空
+        // 初期「修飾」：コースが「三甲」なら「スタート」、それ以外は「出勤」
+        const mod = courseCanon(course)==='三甲' ? 'スタート' : '出勤';
+
+        out.push([name || '', '', mod, course || '', note || '', '']); // 時刻は初期空
       }
-      while(out.length<50) out.push(['','','','','']);
+      while(out.length<50) out.push(['','','','','','']);
       return out.slice(0,50);
     }
 
@@ -257,21 +258,35 @@
       const rows=[];
       [...$tbody.querySelectorAll('tr')].forEach(tr=>{
         const cols=[...tr.querySelectorAll('td')].map(td=>td.textContent.trim());
-        const fixed = [cols[0]||'', cols[1]||'', cols[2]||'', cols[3]||'', cols[4]||''];
+        const fixed = [cols[0]||'', cols[1]||'', cols[2]||'', cols[3]||'', cols[4]||'', cols[5]||''];
         rows.push(fixed);
       });
       return rows;
     }
 
-    // ====== 旧4列→5列補正 ======
-    function coerceTo5Cols(rows){
+    // ====== 旧CSVの互換変換（4/5/6列 → 6列） ======
+    function coerceTo6Cols(rows){
       return rows.map(r=>{
-        if(r.length>=5) return [r[0]||'', r[1]||'', r[2]||'', r[3]||'', r[4]||''];
-        return [r[0]||'', '', r[1]||'', r[2]||'', r[3]||'']; // 出勤時刻は空
+        const n = r.length;
+        if(n>=6) return [r[0]||'', r[1]||'', r[2]||'', r[3]||'', r[4]||'', r[5]||''];
+        if(n===5){
+          // 旧5列：[メンバ, 出勤時刻, コース, 備考, 補足]
+          const course = r[2]||'';
+          const mod = courseCanon(course)==='三甲' ? 'スタート' : '出勤';
+          return [r[0]||'', r[1]||'', mod, course, r[3]||'', r[4]||''];
+        }
+        if(n===4){
+          // 旧4列（さらに旧仕様）：[メンバ, コース, 備考, 補足]
+          const course = r[1]||'';
+          const mod = courseCanon(course)==='三甲' ? 'スタート' : '出勤';
+          return [r[0]||'', '', mod, course, r[2]||'', r[3]||''];
+        }
+        // それ未満は空行
+        return ['','','','','',''];
       });
     }
 
-    // ====== 文字種正規化（時刻用） ======
+    // ====== 文字種正規化（時刻） ======
     function z2hDigitsAndColon(s){
       return String(s||'').replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0)-0xFF10+48))
                           .replace(/：/g, ':')
@@ -290,27 +305,29 @@
     function formatMinutesToHM(mins){
       const h = Math.floor(mins/60);
       const m = mins%60;
-      return `${h}:${String(m).padStart(2,'0')}`; // 時は先頭ゼロなし
+      return `${h}:${String(m).padStart(2,'0')}`;
     }
 
-    // ====== メンバ順：ヘッダ固定／空欄置換ルール ======
+    // ====== メンバ順生成（ヘッダ変更＋時刻と修飾を連結） ======
     function genPlainText(yyyymmdd, bodyRows){
       const title = `【${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡】`;
-      const headerLine = "メンバ/出勤時刻/コース/備考/補足";
+      const headerLine = "メンバ/時刻/コース/備考/補足";
       const lines = [];
       for (const r of bodyRows) {
         const member = String(r?.[0] ?? '').trim();
         const time   = String(r?.[1] ?? '').trim();
-        const course = String(r?.[2] ?? '').trim();
-        const note   = String(r?.[3] ?? '').trim();
-        const extra  = String(r?.[4] ?? '').trim();
+        const mod    = String(r?.[2] ?? '').trim();
+        const course = String(r?.[3] ?? '').trim();
+        const note   = String(r?.[4] ?? '').trim();
+        const extra  = String(r?.[5] ?? '').trim();
 
-        // メンバ以外が全空ならスキップ
+        // メンバ以外（時刻/コース/備考/補足）が全空なら非表示（修飾は判定に含めない）
         if (time==='' && course==='' && note==='' && extra==='') continue;
 
+        const timeJoined = (time || '') + (mod || ''); // 例：7:30出勤 / 7:15スタート
         lines.push([
           member,
-          time,
+          timeJoined,
           course || '─',
           note   || '─',
           extra  || '─'
@@ -321,85 +338,86 @@
         : `${title}\n${headerLine}\n${lines.join('\n')}`;
     }
 
-    // ====== コース順：コース（固定順）→時刻→メンバ ======
+    // ====== コース順生成（コース→［時刻+修飾］→メンバ） ======
     function genCourseText(yyyymmdd, bodyRows){
       const title = `【${Number(yyyymmdd.slice(4,6))}月${Number(yyyymmdd.slice(6,8))}日(${weekJP(yyyymmdd)})の業務連絡】`;
 
-      // 1) 出力対象抽出（メンバ以外が全空は除外）
+      // 1) 対象抽出（メンバ以外が全空は除外）
       const items = [];
       for (const r of bodyRows) {
         const member = String(r?.[0] ?? '').trim();
         const timeRaw= String(r?.[1] ?? '').trim();
-        const courseRaw = String(r?.[2] ?? '').trim();
-        const note   = String(r?.[3] ?? '').trim();
-        const extra  = String(r?.[4] ?? '').trim();
+        const mod    = String(r?.[2] ?? '').trim();
+        const courseRaw = String(r?.[3] ?? '').trim();
+        const note   = String(r?.[4] ?? '').trim();
+        const extra  = String(r?.[5] ?? '').trim();
         if (timeRaw==='' && courseRaw==='' && note==='' && extra==='') continue;
 
         const mins = parseTimeToMinutes(timeRaw);
-        const timeLabel = Number.isNaN(mins) ? (timeRaw || '─') : formatMinutesToHM(mins);
+        const hm   = Number.isNaN(mins) ? (timeRaw || '─') : formatMinutesToHM(mins);
+        const timeLabel = hm + (mod || '');  // 例：6:45スタート / 7:00出勤
 
-        // === 変更点: コース名の正準化（固定順に沿うため）
-        const courseDisp = courseCanon(courseRaw) || UNSET_LABEL; // 表示用
-        const courseKey  = courseDisp;                             // キーも正準名
+        const courseDisp = courseCanon(courseRaw) || UNSET_LABEL;
+        const courseKey  = courseDisp;
 
         items.push({
           courseKey, courseDisp,
-          mins, timeLabel,
+          mins, timeLabel, mod,
           member,
           noteOut:  note || '─',
           extraOut: extra || '─',
           _order: items.length
         });
       }
-      if(items.length===0) return `${title}\n(該当なし)`;
+      if (items.length === 0) return `${title}\n(該当なし)`;
 
       // 2) コースでグルーピング
       const byCourse = new Map();
-      for(const it of items){
-        if(!byCourse.has(it.courseKey)) byCourse.set(it.courseKey, { label: it.courseDisp, rows: [] });
+      for (const it of items){
+        if (!byCourse.has(it.courseKey)) byCourse.set(it.courseKey, { label: it.courseDisp, rows: [] });
         byCourse.get(it.courseKey).rows.push(it);
       }
 
-      // 3) コースキーの並び：定義順 → 未定義（ラベル昇順）→ 未設定は最後
+      // 3) コース順：定義順 → 未定義（ラベル昇順）→ 未設定は最後
       const courseKeys = Array.from(byCourse.keys());
-      const unsetKey = UNSET_LABEL; // 正準名をそのままキーに使用
+      const unsetKey = UNSET_LABEL;
       courseKeys.sort((ka, kb)=>{
         const aUnset = (ka === unsetKey), bUnset = (kb === unsetKey);
-        if(aUnset && !bUnset) return 1;
-        if(!aUnset && bUnset) return -1;
+        if (aUnset && !bUnset) return 1;
+        if (!aUnset && bUnset) return -1;
         const ai = COURSE_ORDER_MAP.has(ka) ? COURSE_ORDER_MAP.get(ka) : Infinity;
         const bi = COURSE_ORDER_MAP.has(kb) ? COURSE_ORDER_MAP.get(kb) : Infinity;
-        if(ai !== bi) return ai - bi;
-        const la = byCourse.get(ka).label;
-        const lb = byCourse.get(kb).label;
+        if (ai !== bi) return ai - bi;
+        const la = byCourse.get(ka).label, lb = byCourse.get(kb).label;
         return la.localeCompare(lb, 'ja');
       });
 
-      // 4) 各コース内：時刻でまとめ、同一時刻は表の出現順
+      // 4) 各コース内：［分, 修飾］でグループ化 → 時刻昇順、同分なら見出し文字で安定
       const out = [title];
-      for(const k of courseKeys){
+      for (const k of courseKeys){
         const grp = byCourse.get(k);
         out.push(grp.label);
 
-        const groups = new Map(); // 分 or 'NaN' → { mins, label, rows }
-        for(const it of grp.rows){
-          const key = Number.isNaN(it.mins) ? 'NaN' : String(it.mins);
-          if(!groups.has(key)) groups.set(key, { mins: it.mins, label: it.timeLabel, rows: [] });
+        const groups = new Map(); // key = `${mins}|${mod||''}`
+        for (const it of grp.rows){
+          const key = (Number.isNaN(it.mins) ? 'NaN' : String(it.mins)) + '|' + (it.mod || '');
+          if (!groups.has(key)) groups.set(key, { mins: it.mins, label: it.timeLabel, rows: [] });
           groups.get(key).rows.push(it);
         }
         const keys = Array.from(groups.keys()).sort((ka,kb)=>{
           const ga=groups.get(ka), gb=groups.get(kb);
           const aNaN = Number.isNaN(ga.mins), bNaN = Number.isNaN(gb.mins);
-          if(aNaN && !bNaN) return 1;
-          if(!aNaN && bNaN) return -1;
-          return (ga.mins - gb.mins);
+          if (aNaN && !bNaN) return 1;
+          if (!aNaN && bNaN) return -1;
+          if (ga.mins !== gb.mins) return ga.mins - gb.mins;
+          return ga.label.localeCompare(gb.label, 'ja');
         });
 
-        for(const kk of keys){
+        for (const kk of keys){
           const g = groups.get(kk);
-          out.push(` ${g.label}`); // 1段インデント
+          out.push(` ${g.label}`); // 1段インデント（例：7:15スタート）
           g.rows.sort((x,y)=> x._order - y._order);
-          for(const r of g.rows){
+          for (const r of g.rows){
             out.push(`  ${r.member} ${r.noteOut} ${r.extraOut}`); // 2段インデント
           }
         }
@@ -416,7 +434,7 @@
         if(!confirm('該当ファイルがあるので編集しますか。')) return null;
         const text = await gasRead(JOB_FOLDER, csv);
         const rows = parseCSV(text);
-        const body = coerceTo5Cols(rows.slice(1)); // 先頭はヘッダ
+        const body = coerceTo6Cols(rows.slice(1)); // 先頭はヘッダ
         return body.slice(0,50);
       }else{
         if(!confirm('該当ファイルが無いので新規作成しますか。')) return null;
@@ -425,13 +443,10 @@
     }
 
     // ====== 新規作成：シフトCSVの決定・読込 ======
-    function ymdToMonthPrefix(yyyymmdd){
-      const {y,m} = ymdParts(yyyymmdd);
-      return `${Number(y)}年${String(Number(m)).padStart(2,'0')}月 GOLKANOシフト情報`;
-    }
-    async function buildFromShift(yyyymmdd){
+    async function buildFromShiftEntry(yyyymmdd){
       const files = await gasList(SHIFT_FOLDER);
-      const monthPrefix = ymdToMonthPrefix(yyyymmdd);
+      const {y,m} = ymdParts(yyyymmdd);
+      const monthPrefix = `${Number(y)}年${String(Number(m)).padStart(2,'0')}月 GOLKANOシフト情報`;
       const candidates = files.filter(n => n.startsWith(monthPrefix) && /\.csv$/i.test(n));
       let target;
       if(candidates.length){
@@ -460,7 +475,7 @@
           if(!/^\d{8}$/.test(ymd)) throw new Error('日付は yyyymmdd の8桁で入力してください。');
           const exist = await tryLoadExisting(ymd);
           if(exist===null){ setBusy(false,'待機中'); return; }
-          const arr = Array.isArray(exist) ? exist : await buildFromShift(ymd);
+          const arr = Array.isArray(exist) ? exist : await buildFromShiftEntry(ymd);
           renderTableBody(arr);
           tableReady = true;
           setBusy(false,'編集表を表示中');
@@ -489,7 +504,7 @@
         }
       });
 
-      // メンバ順生成
+      // メンバ順生成（時刻+修飾で出力）
       $member.addEventListener('click', ()=>{
         if(!tableReady) return;
         clearMsg();
@@ -506,7 +521,7 @@
         setBusy(false,'テキスト表示中');
       });
 
-      // コース順生成（固定順で出力）
+      // コース順生成（コース → ［時刻+修飾］ → メンバ）
       $course.addEventListener('click', ()=>{
         if(!tableReady) return;
         clearMsg();
