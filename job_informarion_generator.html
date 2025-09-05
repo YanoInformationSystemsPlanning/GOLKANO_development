@@ -72,14 +72,14 @@
     col.w-extra {width:calc(10em + (2*var(--px)) + (2*var(--bw)))}  /* 全角10 */
 
     .note{font-size:12px;color:#555;margin-top:8px}
-    textarea.plain{width:100%;height:480px;border:1px solid #e5e5e5;border-radius:10px;padding:10px;box-sizing:border-box;font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;font-size:14px;white-space:pre}
+    textarea.plain{width:100%;border:1px solid #e5e5e5;border-radius:10px;padding:10px;box-sizing:border-box;font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;font-size:14px;white-space:pre}
     .right{margin-left:auto}
   </style>
 </head>
 <body>
 <header>
   <button class="btn sub" onclick="location.href='top_menu.html'">トップに戻る</button>
-  <div class="spacer"></div><span id="version" class="ver">Ver.20250905h</span>
+  <div class="spacer"></div><span class="ver">Ver.20250905h</span>
 </header>
 
 <main>
@@ -283,6 +283,37 @@ function genCourseText(ymd,rows){
   return out.join('\n');
 }
 
+/* ===== 表示領域：縦画面は約1.5倍に拡張 ===== */
+function isPortrait(){
+  return (window.matchMedia && window.matchMedia('(orientation: portrait)').matches)
+         || (window.innerHeight > window.innerWidth);
+}
+function fitTableViewport(){
+  const wrap = $wrap;
+  if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const bottomGap = 16;
+  const avail = Math.floor(window.innerHeight - rect.top - bottomGap);
+  const factor = isPortrait() ? 1.5 : 1;   // 縦型は1.5倍
+  const h = Math.max(240, Math.floor(avail * factor));
+  if (isPortrait()) { wrap.style.maxHeight=''; wrap.style.height = h + 'px'; }
+  else { wrap.style.height=''; wrap.style.maxHeight = h + 'px'; }
+}
+function fitPlainViewport(){
+  if ($plain.style.display === 'none') return;
+  const rect = $plain.getBoundingClientRect();
+  const top = rect.top || $('editorBox').getBoundingClientRect().top;
+  const bottomGap = 16;
+  const avail = Math.floor(window.innerHeight - top - bottomGap);
+  const factor = isPortrait() ? 1.5 : 1;   // 縦型は1.5倍
+  const h = Math.max(240, Math.floor(avail * factor));
+  $plain.style.height = h + 'px';
+}
+function applyViewportFit(){
+  if (currentMode === 'text') fitPlainViewport();
+  else fitTableViewport();
+}
+
 /* ===== 既存CSV確認/ロード ===== */
 async function tryLoadExisting(ymd){
   const files=await gasList(JOB_FOLDER), csv=`${ymd}_業務連絡.csv`;
@@ -313,15 +344,6 @@ async function buildFromShiftEntry(ymd){
   return buildJobArrayFromShift(rows,ymd);
 }
 
-/* ===== 表示領域：縦スクロール高さの自動調整 ===== */
-function fitTableViewport(){
-  const wrap=$wrap; if(!wrap) return;
-  const rect=wrap.getBoundingClientRect();
-  const bottomGap=16; // 下余白
-  const maxH=Math.max(240, Math.floor(window.innerHeight - rect.top - bottomGap));
-  wrap.style.maxHeight = maxH + 'px';   // 縦スクロール領域を確保（ヘッダは sticky で常に上）
-}
-
 /* ===== 初期化・ハンドラ ===== */
 (function init(){
   const t=new Date(); t.setDate(t.getDate()+1); $date.value=toYmd(t);
@@ -335,7 +357,7 @@ function fitTableViewport(){
       if(exist===null){ setBusy(false,'待機中'); return; }
       const arr=Array.isArray(exist)?exist:await buildFromShiftEntry(ymd);
       renderTableBody(arr);
-      fitTableViewport();                 // 縦スクロール高さ調整
+      fitTableViewport();                 // 表の高さ調整
       tableReady=true;
       setBusy(false,'編集表を表示中'); info('編集表を用意しました。セルは直接編集できます。');
       $save.disabled=false; $member.disabled=false; $course.disabled=false;
@@ -357,35 +379,42 @@ function fitTableViewport(){
 
   $member.addEventListener('click',()=>{
     if(!tableReady) return; clearMsg();
-    const h=$('editorBox').offsetHeight;
-    $table.style.display='none'; $plain.style.display='block'; $plain.style.height=(h-20)+'px';
-    const ymd=($date.value||'').trim(); $plain.value=genPlainText(ymd,collectTableBody());
-    currentMode='text'; $back.style.display='inline-block'; setBusy(false,'テキスト表示中');
+    $table.style.display='none';
+    $plain.style.display='block';
+    $plain.value=genPlainText(($date.value||'').trim(),collectTableBody());
+    currentMode='text';
+    $back.style.display='inline-block';
+    fitPlainViewport();                 // テキスト高さ調整（縦型1.5倍）
+    setBusy(false,'テキスト表示中');
   });
 
   $course.addEventListener('click',()=>{
     if(!tableReady) return; clearMsg();
-    const h=$('editorBox').offsetHeight;
-    $table.style.display='none'; $plain.style.display='block'; $plain.style.height=(h-20)+'px';
-    const ymd=($date.value||'').trim(); $plain.value=genCourseText(ymd,collectTableBody());
-    currentMode='text'; $back.style.display='inline-block'; setBusy(false,'テキスト表示中');
+    $table.style.display='none';
+    $plain.style.display='block';
+    $plain.value=genCourseText(($date.value||'').trim(),collectTableBody());
+    currentMode='text';
+    $back.style.display='inline-block';
+    fitPlainViewport();                 // テキスト高さ調整（縦型1.5倍）
+    setBusy(false,'テキスト表示中');
   });
 
   $back.addEventListener('click',()=>{
     $plain.style.display='none'; $table.style.display='';
-    fitTableViewport();                  // 表へ戻ったら再計算
-    currentMode='table'; $back.style.display='none';
+    currentMode='table';
+    $back.style.display='none';
+    applyViewportFit();                 // 現モードに応じて再計算（＝表の高さ調整）
     setBusy(false,'編集表を表示中');
   });
 
-  // 画面回転・リサイズで縦スクロール高さを追従
+  // 画面回転・リサイズで高さを追従
   let _fitTimer=null;
   ['resize','orientationchange'].forEach(ev=>{
-    window.addEventListener(ev,()=>{ clearTimeout(_fitTimer); _fitTimer=setTimeout(fitTableViewport,100); });
+    window.addEventListener(ev,()=>{ clearTimeout(_fitTimer); _fitTimer=setTimeout(applyViewportFit,100); });
   });
 
   // 初期1回（空でも一応高さセット）
-  fitTableViewport();
+  applyViewportFit();
 })();
 </script>
 </body>
