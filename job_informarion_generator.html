@@ -27,6 +27,7 @@
 
     .btn{appearance:none;border:none;border-radius:10px;padding:10px 14px;font-size:16px;color:#fff;background:var(--primary);cursor:pointer}
     .btn.sub{background:#888}
+    .btn.compact{padding:8px 10px;font-size:14px}
     .btn:disabled{opacity:.6;cursor:not-allowed}
 
     label{font-size:14px}
@@ -42,31 +43,24 @@
 
     /* ======= 編集表：横・縦スクロール対応 + ヘッダ/先頭列固定 ======= */
     .tableWrap{
-      overflow: auto;                         /* 縦横スクロール */
-      -webkit-overflow-scrolling: touch;
-      border:1px solid #eee;border-radius:10px;
-      background:#fff;
+      overflow:auto;                         /* 縦横スクロール */
+      -webkit-overflow-scrolling:touch;
+      border:1px solid #eee;border-radius:10px;background:#fff;
     }
-    .tableWrap > table{
+    .tableWrap>table{
       border-collapse:separate;border-spacing:0;table-layout:fixed;
-      width:max-content;                      /* 列幅合計を保持 → 横スクロール */
-      min-width:100%;                         /* 画面幅以下に縮ませない */
+      width:max-content;                     /* 列幅合計を保持 → 横スクロール */
+      min-width:100%;                        /* 画面幅以下に縮ませない */
     }
-    @supports not (width:max-content){
-      .tableWrap > table{width:auto}
-    }
+    @supports not (width:max-content){ .tableWrap>table{width:auto} }
 
     th,td{
       border:1px solid var(--tbl);padding:6px var(--px);text-align:left;background:#fff;
       white-space:normal;overflow-wrap:anywhere;word-break:break-word;box-sizing:border-box;
     }
-    thead th{
-      position:sticky;top:0;z-index:2;background:var(--thead);
-    }
-    th:first-child,td:first-child{
-      position:sticky;left:0;z-index:1;background:#fff;box-shadow:2px 0 0 rgba(0,0,0,.02)
-    }
-    thead th:first-child{z-index:3;background:var(--thead)}
+    thead th{ position:sticky; top:0; z-index:2; background:var(--thead); }
+    th:first-child,td:first-child{ position:sticky; left:0; z-index:1; background:#fff; box-shadow:2px 0 0 rgba(0,0,0,.02) }
+    thead th:first-child{ z-index:3; background:var(--thead) }
     td[contenteditable="true"]{background:#fffef8;outline:none}
 
     /* 列幅：指定文字数きっちり（オーバー分は改行） */
@@ -85,7 +79,7 @@
 <body>
 <header>
   <button class="btn sub" onclick="location.href='top_menu.html'">トップに戻る</button>
-  <div class="spacer"></div><span id="version" class="ver">Ver.20250905g-patchScroll</span>
+  <div class="spacer"></div><span id="version" class="ver">Ver.20250905h</span>
 </header>
 
 <main>
@@ -95,8 +89,8 @@
       <input id="dateInput" type="text" inputmode="numeric" pattern="\d{8}" placeholder="yyyymmdd" />
       <button id="editBtn"   class="btn">業務連絡編集</button>
       <button id="saveBtn"   class="btn" disabled>内容保存</button>
-      <button id="memberBtn" class="btn" disabled>メンバ順生成</button>
-      <button id="courseBtn" class="btn" disabled>コース順生成</button>
+      <button id="memberBtn" class="btn compact" disabled>メンバ順</button>
+      <button id="courseBtn" class="btn compact" disabled>コース順</button>
       <button id="backToTableBtn" class="btn sub right" style="display:none">表に戻す</button>
     </div>
     <div id="msg" class="msg"></div>
@@ -119,7 +113,7 @@
       </div>
       <textarea id="plainText" class="plain" style="display:none"></textarea>
     </div>
-    <div class="note">＊「業務連絡編集」で表を生成後に「内容保存」「メンバ順生成」「コース順生成」が有効になります。</div>
+    <div class="note">＊「業務連絡編集」で表を生成後に「内容保存」「メンバ順」「コース順」が有効になります。</div>
   </div>
 </main>
 
@@ -127,7 +121,6 @@
 /* ===== 設定 ===== */
 const GAS_URL="https://script.google.com/macros/s/AKfycbxrnvzng88PDqgnubPyHC1n82EXZn8_zHU9EoAL922BcKwDc4QamCtQlpiaSwdWwS3mNg/exec";
 const JOB_FOLDER="job_information", SHIFT_FOLDER="shift_management";
-const VERSION="20250905g-patchScroll";
 
 /* コース順（完全一致のみ優先） */
 const UNSET='（コース未設定）';
@@ -137,7 +130,7 @@ const COURSE_ORDER_MAP=(()=>{const m=new Map();COURSE_ORDER.forEach((n,i)=>m.set
 /* ===== 要素 ===== */
 const $=id=>document.getElementById(id);
 const $date=$('dateInput'),$edit=$('editBtn'),$save=$('saveBtn'),$member=$('memberBtn'),$course=$('courseBtn'),$back=$('backToTableBtn');
-const $msg=$('msg'),$stat=$('status'),$tbody=$('editTbody'),$table=$('editTable'),$plain=$('plainText'),$ver=$('version'),$wrap=$('tableWrap');
+const $msg=$('msg'),$stat=$('status'),$tbody=$('editTbody'),$table=$('editTable'),$plain=$('plainText'),$wrap=$('tableWrap');
 
 let currentMode='table', tableReady=false;
 const headerRow=["メンバ","時刻","修飾","コース","備考","補足"];
@@ -331,7 +324,6 @@ function fitTableViewport(){
 
 /* ===== 初期化・ハンドラ ===== */
 (function init(){
-  $('version').textContent=`Ver.${VERSION}`;
   const t=new Date(); t.setDate(t.getDate()+1); $date.value=toYmd(t);
 
   $edit.addEventListener('click',async()=>{
@@ -343,7 +335,7 @@ function fitTableViewport(){
       if(exist===null){ setBusy(false,'待機中'); return; }
       const arr=Array.isArray(exist)?exist:await buildFromShiftEntry(ymd);
       renderTableBody(arr);
-      fitTableViewport();                 // ← 縦スクロール高さ調整
+      fitTableViewport();                 // 縦スクロール高さ調整
       tableReady=true;
       setBusy(false,'編集表を表示中'); info('編集表を用意しました。セルは直接編集できます。');
       $save.disabled=false; $member.disabled=false; $course.disabled=false;
@@ -381,7 +373,7 @@ function fitTableViewport(){
 
   $back.addEventListener('click',()=>{
     $plain.style.display='none'; $table.style.display='';
-    fitTableViewport();                  // ← 表へ戻ったら再計算
+    fitTableViewport();                  // 表へ戻ったら再計算
     currentMode='table'; $back.style.display='none';
     setBusy(false,'編集表を表示中');
   });
