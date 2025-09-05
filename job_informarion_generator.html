@@ -331,7 +331,7 @@ async function tryLoadExisting(ymd){
 /* ===== 新規作成：シフトCSV選定・読込 ===== */
 async function buildFromShiftEntry(ymd){
   const files=await gasList(SHIFT_FOLDER), y=slice2(ymd,0,4), m=slice2(ymd,4,6);
-  const pref=`${Number(y)}年${String(Number(m)).padStart(2,'0')}月 GOLKANOシフト情報`;
+  const pref=`【 ${Number(y)}年${String(Number(m)).padStart(2,'0')}月 GOLKANOシフト情報 】`;
   const cand=files.filter(n=>n.startsWith(pref)&&/\.csv$/i.test(n));
   let target;
   if(cand.length){ target=cand.sort((a,b)=>b.localeCompare(a,'ja'))[0]; }
