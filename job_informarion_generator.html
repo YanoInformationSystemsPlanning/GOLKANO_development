@@ -79,7 +79,7 @@
 <body>
 <header>
   <button class="btn sub" onclick="location.href='top_menu.html'">トップに戻る</button>
-  <div class="spacer"></div><span class="ver">Ver.20250905h</span>
+  <div class="spacer"></div><span class="ver">Ver.20250905i</span>
 </header>
 
 <main>
@@ -142,7 +142,8 @@ const err =t=>{$msg.className='msg error';$msg.textContent=t;$msg.style.display=
 const clearMsg=()=>{$msg.style.display='none';$msg.textContent=''};
 const norm=s=>String(s||'').replace(/\uFEFF/g,'').normalize('NFKC').trim();
 const toYmd=d=>`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-const parts=s=>({y:s.slice(0,4),m:s.slice(4,6),d:s.slice(6,8)});
+const parts=s=>({y:s.slice(0,4),m:slice2(s,4,6),d:slice2(s,6,8)});
+function slice2(s,a,b){return (s||'').slice(a,b)}
 const weekJP=ymd=>['日','月','火','水','木','金','土'][new Date(+parts(ymd).y,+parts(ymd).m-1,+parts(ymd).d).getDay()];
 
 /* ===== CSV ===== */
@@ -160,7 +161,7 @@ function findHolidayRowIndex(rows){const t='祝日フラグ';for(let i=0;i<rows.
 function findDateColumn(rows,idx,dd){const row=rows[idx-1]||[];const start=3;const cand=[String(Number(dd,10)),dd.replace(/^0/,'')||dd,dd];for(let c=start;c<row.length;c++){const v=String(row[c]||'').trim();if(cand.includes(v))return c}return -1}
 function buildJobArrayFromShift(rows,ymd){
   const i=findHolidayRowIndex(rows); if(i<=0) throw new Error('祝日フラグ行が見つかりません。');
-  const {d}=parts(ymd); const col=findDateColumn(rows,i,d); if(col<0) throw new Error(`日付列（${d}日）が見つかりません。`);
+  const d=slice2(ymd,6,8); const col=findDateColumn(rows,i,d); if(col<0) throw new Error(`日付列（${d}日）が見つかりません。`);
   const out=[]; const start=i+2;
   for(let k=0;k<50;k++){
     const r=start+k*3, rN=rows[r]||[], rW=rows[r]||[], rR=rows[r+1]||[];
@@ -221,7 +222,7 @@ const hm=m=>`${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
 
 /* ===== メンバ順生成 ===== */
 function genPlainText(ymd,rows){
-  const title=`${+ymd.slice(4,6)}月${+ymd.slice(6,8)}日(${weekJP(ymd)})の業務連絡`;
+  const title=`${+slice2(ymd,4,6)}月${+slice2(ymd,6,8)}日(${weekJP(ymd)})の業務連絡`;
   const header="メンバ/時刻/コース/備考/補足";
   const lines=[];
   for(const r of rows){
@@ -235,7 +236,7 @@ function genPlainText(ymd,rows){
 
 /* ===== コース順生成 ===== */
 function genCourseText(ymd,rows){
-  const title=`${+ymd.slice(4,6)}月${+ymd.slice(6,8)}日(${weekJP(ymd)})の業務連絡`;
+  const title=`${+slice2(ymd,4,6)}月${+slice2(ymd,6,8)}日(${weekJP(ymd)})の業務連絡`;
   const items=[];
   for(const r of rows){
     const member=(r?.[0]??'').trim(), timeRaw=(r?.[1]??'').trim(), mod=(r?.[2]??'').trim();
@@ -329,7 +330,7 @@ async function tryLoadExisting(ymd){
 
 /* ===== 新規作成：シフトCSV選定・読込 ===== */
 async function buildFromShiftEntry(ymd){
-  const files=await gasList(SHIFT_FOLDER), {y,m}=parts(ymd);
+  const files=await gasList(SHIFT_FOLDER), y=slice2(ymd,0,4), m=slice2(ymd,4,6);
   const pref=`${Number(y)}年${String(Number(m)).padStart(2,'0')}月 GOLKANOシフト情報`;
   const cand=files.filter(n=>n.startsWith(pref)&&/\.csv$/i.test(n));
   let target;
@@ -357,7 +358,9 @@ async function buildFromShiftEntry(ymd){
       if(exist===null){ setBusy(false,'待機中'); return; }
       const arr=Array.isArray(exist)?exist:await buildFromShiftEntry(ymd);
       renderTableBody(arr);
-      fitTableViewport();                 // 表の高さ調整
+      $wrap.style.display='block';         // 表モードでは表示
+      $plain.style.display='none';
+      fitTableViewport();                  // 表の高さ調整
       tableReady=true;
       setBusy(false,'編集表を表示中'); info('編集表を用意しました。セルは直接編集できます。');
       $save.disabled=false; $member.disabled=false; $course.disabled=false;
@@ -379,31 +382,34 @@ async function buildFromShiftEntry(ymd){
 
   $member.addEventListener('click',()=>{
     if(!tableReady) return; clearMsg();
-    $table.style.display='none';
+    $wrap.style.display='none';            // ラッパーごと隠して空白を防ぐ
+    $wrap.style.height=''; $wrap.style.maxHeight='';
     $plain.style.display='block';
     $plain.value=genPlainText(($date.value||'').trim(),collectTableBody());
     currentMode='text';
     $back.style.display='inline-block';
-    fitPlainViewport();                 // テキスト高さ調整（縦型1.5倍）
+    applyViewportFit();                    // テキスト高さ調整（縦型1.5倍）
     setBusy(false,'テキスト表示中');
   });
 
   $course.addEventListener('click',()=>{
     if(!tableReady) return; clearMsg();
-    $table.style.display='none';
+    $wrap.style.display='none';            // ラッパーごと隠して空白を防ぐ
+    $wrap.style.height=''; $wrap.style.maxHeight='';
     $plain.style.display='block';
     $plain.value=genCourseText(($date.value||'').trim(),collectTableBody());
     currentMode='text';
     $back.style.display='inline-block';
-    fitPlainViewport();                 // テキスト高さ調整（縦型1.5倍）
+    applyViewportFit();                    // テキスト高さ調整（縦型1.5倍）
     setBusy(false,'テキスト表示中');
   });
 
   $back.addEventListener('click',()=>{
-    $plain.style.display='none'; $table.style.display='';
+    $plain.style.display='none';
+    $wrap.style.display='block';           // 表を復活
     currentMode='table';
     $back.style.display='none';
-    applyViewportFit();                 // 現モードに応じて再計算（＝表の高さ調整）
+    applyViewportFit();                    // 表モードの高さを再計算
     setBusy(false,'編集表を表示中');
   });
 
