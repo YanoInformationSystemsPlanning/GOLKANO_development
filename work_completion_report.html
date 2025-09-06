@@ -1,6 +1,154 @@
-<script>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="format-detection" content="telephone=no">
+  <title>業務終了報告</title>
+  <style>
+    :root {
+      --fg: #111;
+      --muted: #666;
+      --accent: #2962ff;
+      --danger: #d32f2f;
+      --ok: #2e7d32;
+      --bg: #fafafa;
+      --card: #ffffff;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+      "Apple Color Emoji", "Segoe UI Emoji"; color: var(--fg); background: var(--bg);
+      line-height: 1.6; font-size: 16px;
+      touch-action: manipulation;
+    }
+    header.toolbar {
+      position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: .75rem;
+      padding: .75rem; background: var(--card); border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .spacer { flex: 1; }
+    .version { color: var(--muted); font-size: .95rem; }
+    .container { max-width: 980px; margin: 0 auto; padding: .25rem .75rem 2rem; }
+
+    .row { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; }
+    label.inline { display: inline-flex; align-items: center; gap: .5rem; }
+    input[type="text"], textarea, select {
+      font-size: 16px; /* iOS ズーム抑止 */
+      padding: .5rem .6rem; border: 1px solid var(--border); border-radius: .5rem; background: #fff;
+      min-width: 12ch;
+    }
+    input[disabled], textarea[disabled] { background: #f5f5f5; color: #999; }
+
+    button {
+      appearance: none; border: 1px solid var(--border); background: #fff; color: var(--fg);
+      padding: .55rem .9rem; border-radius: .65rem; cursor: pointer; font-size: 16px; transition: .15s;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+    button:active { transform: translateY(0); box-shadow: none; }
+    button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+    button.danger { background: var(--danger); color: #fff; border-color: transparent; }
+    button:disabled { opacity: .6; pointer-events: none; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: .75rem; padding: 1rem; margin-top: .75rem; }
+    .hidden { display: none; }
+
+    .field { display: grid; grid-template-columns: 10.5rem 1fr; gap: .75rem; align-items: start; }
+    .field + .field { margin-top: .75rem; }
+    .field .label { color: var(--muted); padding-top: .45rem; }
+
+    .note { color: var(--muted); font-size: .9rem; }
+    .msg { margin-top: .5rem; font-size: .95rem; }
+    .msg.error { color: var(--danger); }
+    .msg.ok { color: var(--ok); }
+
+    .spinner { display: inline-block; width: 1em; height: 1em; border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -0.2em; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer-space { height: 2rem; }
+
+    @media (max-width: 640px) {
+      .field { grid-template-columns: 1fr; }
+      .field .label { padding-top: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <button id="backBtn">トップに戻る</button>
+    <div class="spacer"></div>
+    <div class="version" id="userInfoText"></div>
+    <div class="version" id="versionText">Ver.2025-09-06d</div>
+  </header>
+
+  <div class="container">
+    <section class="card" aria-label="操作">
+      <div class="row">
+        <label class="inline" for="dateInput"><span>日付</span>
+          <input id="dateInput" type="text" inputmode="numeric" pattern="\d{8}" placeholder="yyyymmdd" aria-describedby="dateHelp">
+        </label>
+        <button id="startBtn" class="primary">業務終了報告</button>
+        <button id="submitBtn" class="danger" disabled>報告提出</button>
+      </div>
+      <div id="dateHelp" class="note">例：20250906（8桁）</div>
+      <div id="status" class="note" style="margin-top:.5rem"></div>
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="formArea" class="card hidden" aria-label="入力フォーム">
+      <div class="field">
+        <div class="label">対象コース：</div>
+        <div>
+          <input id="courseInput" type="text" placeholder="コース名を入力" />
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">実施業務：</div>
+        <div>
+          <input id="workInput" type="text" placeholder="プルダウンからの選択 or 直接入力" list="workOptions" />
+          <datalist id="workOptions">
+            <option value="キャディ1R"></option>
+            <option value="キャディ1.5R"></option>
+            <option value="キャディ2R"></option>
+            <option value="全日ポーター"></option>
+            <option value="半日ポーター"></option>
+            <option value="当日キャンセル"></option>
+          </datalist>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">チョコ券枚数：</div>
+        <div>
+          <input id="ticketInput" type="text" placeholder="0以上の半角数字で入力" />
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">報告事項：</div>
+        <div>
+          <textarea id="reportInput" rows="1" placeholder="無し or 遅刻、打球事故、クラブ・カバーの紛失・破損、備品の紛失・破損 などを入力"></textarea>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">お客様から褒められたこと：</div>
+        <div>
+          <textarea id="praiseInput" rows="1" placeholder="入力必須"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-space"></div>
+  </div>
+
+  <script>
   (function(){
-    const VERSION = 'Ver.2025-09-06c';
+    const VERSION = 'Ver.2025-09-06d';
     const GAS_DEPLOY_ID = 'AKfycbxrnvzng88PDqgnubPyHC1n82EXZn8_zHU9EoAL922BcKwDc4QamCtQlpiaSwdWwS3mNg';
     const GAS_BASE_URL = `https://script.google.com/macros/s/${GAS_DEPLOY_ID}/exec`;
 
@@ -166,9 +314,12 @@
     async function tryReadExistingReport(date8, userName){
       const filename = targetReportName(date8, userName);
       try {
-        // 誤判定防止：まず一覧で存在確認
+        // まず一覧で存在確認（誤検知防止）
         const list = await listFiles(FOLDERS.workCompletion);
-        if(!Array.isArray(list) || !list.includes(filename)) return null;
+        const names = Array.isArray(list) ? list
+                   : Array.isArray(list?.files) ? list.files
+                   : [];
+        if(!names.includes(filename)) return null;
 
         const txt = await readFile(FOLDERS.workCompletion, filename);
         if(typeof txt !== 'string') return null;
@@ -327,6 +478,6 @@
     });
 
   })();
-</script>
+  </script>
 </body>
 </html>
