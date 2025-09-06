@@ -109,16 +109,22 @@
       <div class="field">
         <div class="label">実施業務：</div>
         <div>
-          <!-- 仕様変更：ガイダンス文言のみ（機能変更なし） -->
-          <input id="workInput" type="text" placeholder="選択 or 直接入力" list="workOptions" />
-          <datalist id="workOptions">
-            <option value="キャディ1R"></option>
-            <option value="キャディ1.5R"></option>
-            <option value="キャディ2R"></option>
-            <option value="全日ポーター"></option>
-            <option value="半日ポーター"></option>
-            <option value="当日キャンセル"></option>
-          </datalist>
+          <div class="row" style="gap:.5rem .5rem; align-items:start; margin-bottom:.5rem;">
+            <select id="workSelect">
+              <option value="">（選択してください）</option>
+              <option value="キャディ1R">キャディ1R</option>
+              <option value="キャディ1.5R">キャディ1.5R</option>
+              <option value="キャディ2R">キャディ2R</option>
+              <option value="全日ポーター">全日ポーター</option>
+              <option value="半日ポーター">半日ポーター</option>
+              <option value="当日キャンセル">当日キャンセル</option>
+              <option value="同伴研修">同伴研修</option>
+              <option value="身内指導">身内指導</option>
+              <option value="身内研修">身内研修</option>
+              <option value="身内打手">身内打手</option>
+            </select>
+          </div>
+          <input id="workInput" type="text" placeholder="選択 or 直接入力" />
         </div>
       </div>
 
@@ -181,6 +187,7 @@
       formArea: document.getElementById('formArea'),
       courseInput: document.getElementById('courseInput'),
       workInput: document.getElementById('workInput'),
+      workSelect: document.getElementById('workSelect'),
       ticketInput: document.getElementById('ticketInput'),
       // 追加参照
       reportSelect: document.getElementById('reportSelect'),
@@ -234,10 +241,11 @@
       hydrateAutoGrow();
     }
     function fillFormFromJobInfoRow(row){
-      // row: [メンバ名, 2列目, 3列目, 4列目(対象コース), ...]
+      // row: [メンバ名, 2列目, 3列目, 4列目(対象コース), 5列目(実施業務), ...]
       const course = (row && row[3]) ? String(row[3]).trim() : '';
+      const work   = (row && row[4]) ? String(row[4]).trim() : '';
       els.courseInput.value = course;
-      els.workInput.value = '';
+      els.workInput.value   = work;
       els.ticketInput.value = '';
       els.reportInput.value = '';
       els.praiseInput.value = '';
@@ -411,6 +419,14 @@
 
     els.dateInput.value = yyyymmddJST();
     hydrateAutoGrow();
+
+    // 追加：実施業務のセレクト選択 → 入力欄へ上書き（選択後も自由編集可）
+    if(els.workSelect){
+      els.workSelect.addEventListener('change', () => {
+        const v = els.workSelect.value;
+        if(v !== ''){ els.workInput.value = v; }
+      });
+    }
 
     // 追加：報告事項のセレクト選択 → テキストエリアへ上書き（選択後も自由編集可）
     if(els.reportSelect){
