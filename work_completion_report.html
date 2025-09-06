@@ -30,7 +30,7 @@
     }
     .spacer { flex: 1; }
     .version { color: var(--muted); font-size: .95rem; }
-    .container { max-width: 980px; margin: 0 auto; padding: 1rem .75rem 2rem; }
+    .container { max-width: 980px; margin: 0 auto; padding: .25rem .75rem 2rem; }
 
     .row { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; }
     label.inline { display: inline-flex; align-items: center; gap: .5rem; }
@@ -79,6 +79,7 @@
   <header class="toolbar">
     <button id="backBtn">トップに戻る</button>
     <div class="spacer"></div>
+    <div class="version" id="userInfoText"></div>
     <div class="version" id="versionText">Ver.2025-09-06a</div>
   </header>
 
@@ -123,7 +124,7 @@
       <div class="field">
         <div class="label">チョコ券枚数：</div>
         <div>
-          <input id="ticketInput" type="text" placeholder="枚数を0以上の半角数字で入力" />
+          <input id=\"ticketInput\" type=\"text\" placeholder=\"0以上の半角数字で入力\" />
         </div>
       </div>
 
@@ -159,6 +160,7 @@
     const els = {
       backBtn: document.getElementById('backBtn'),
       versionText: document.getElementById('versionText'),
+      userInfoText: document.getElementById('userInfoText'),
       dateInput: document.getElementById('dateInput'),
       startBtn: document.getElementById('startBtn'),
       submitBtn: document.getElementById('submitBtn'),
@@ -353,9 +355,19 @@
     async function tryReadExistingReport(date8, userName){
       const filename = targetReportName(date8, userName);
       try {
+        // まず一覧で存在確認（誤検知防止）
+        const list = await listFiles(FOLDERS.workCompletion);
+        if(!Array.isArray(list) || !list.includes(filename)) return null;
         const txt = await readFile(FOLDERS.workCompletion, filename);
-        if(typeof txt === 'string' && txt.length){ return txt; }
-        return null;
+        if(typeof txt !== 'string') return null;
+        // 空や明らかなエラーレスポンスは除外
+        const trimmed = txt.trim();
+        if(!trimmed) return null;
+        if(/^\{/.test(trimmed)){
+          try{ const j = JSON.parse(trimmed); if(j && j.error) return null; }catch(_){/*not json*/}
+        }
+        if(/not\s*found|エラー|不存在|404/i.test(trimmed)) return null;
+        return txt;
       } catch(e){
         return null; // 無ければ null
       }
