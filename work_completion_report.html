@@ -1,154 +1,6 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta name="format-detection" content="telephone=no">
-  <title>業務終了報告</title>
-  <style>
-    :root {
-      --fg: #111;
-      --muted: #666;
-      --accent: #2962ff;
-      --danger: #d32f2f;
-      --ok: #2e7d32;
-      --bg: #fafafa;
-      --card: #ffffff;
-      --border: #e5e7eb;
-    }
-    * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; }
-    body {
-      margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-      "Apple Color Emoji", "Segoe UI Emoji"; color: var(--fg); background: var(--bg);
-      line-height: 1.6; font-size: 16px;
-      touch-action: manipulation;
-    }
-    header.toolbar {
-      position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: .75rem;
-      padding: .75rem; background: var(--card); border-bottom: 1px solid var(--border);
-    }
-    .spacer { flex: 1; }
-    .version { color: var(--muted); font-size: .95rem; }
-    .container { max-width: 980px; margin: 0 auto; padding: .25rem .75rem 2rem; }
-
-    .row { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; }
-    label.inline { display: inline-flex; align-items: center; gap: .5rem; }
-    input[type="text"], textarea, select {
-      font-size: 16px; /* iOS ズーム抑止 */
-      padding: .5rem .6rem; border: 1px solid var(--border); border-radius: .5rem; background: #fff;
-      min-width: 12ch;
-    }
-    input[disabled], textarea[disabled] { background: #f5f5f5; color: #999; }
-
-    button {
-      appearance: none; border: 1px solid var(--border); background: #fff; color: var(--fg);
-      padding: .55rem .9rem; border-radius: .65rem; cursor: pointer; font-size: 16px; transition: .15s;
-    }
-    button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.06); }
-    button:active { transform: translateY(0); box-shadow: none; }
-    button.primary { background: var(--accent); color: #fff; border-color: transparent; }
-    button.danger { background: var(--danger); color: #fff; border-color: transparent; }
-    button:disabled { opacity: .6; pointer-events: none; }
-
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: .75rem; padding: 1rem; }
-    .hidden { display: none; }
-
-    .field { display: grid; grid-template-columns: 10.5rem 1fr; gap: .75rem; align-items: start; }
-    .field + .field { margin-top: .75rem; }
-    .field .label { color: var(--muted); padding-top: .45rem; }
-
-    .note { color: var(--muted); font-size: .9rem; }
-    .msg { margin-top: .5rem; font-size: .95rem; }
-    .msg.error { color: var(--danger); }
-    .msg.ok { color: var(--ok); }
-
-    .spinner { display: inline-block; width: 1em; height: 1em; border: 2px solid var(--border); border-top-color: var(--accent);
-      border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -0.2em; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .footer-space { height: 2rem; }
-
-    @media (max-width: 640px) {
-      .field { grid-template-columns: 1fr; }
-      .field .label { padding-top: 0; }
-    }
-  </style>
-</head>
-<body>
-  <header class="toolbar">
-    <button id="backBtn">トップに戻る</button>
-    <div class="spacer"></div>
-    <div class="version" id="userInfoText"></div>
-    <div class="version" id="versionText">Ver.2025-09-06a</div>
-  </header>
-
-  <div class="container">
-    <section class="card" aria-label="操作">
-      <div class="row">
-        <label class="inline" for="dateInput"><span>日付</span>
-          <input id="dateInput" type="text" inputmode="numeric" pattern="\\d{8}" placeholder="yyyymmdd" aria-describedby="dateHelp">
-        </label>
-        <button id="startBtn" class="primary">業務終了報告</button>
-        <button id="submitBtn" class="danger" disabled>報告提出</button>
-      </div>
-      <div id="dateHelp" class="note">例：20250906（8桁）</div>
-      <div id="status" class="note" style="margin-top:.5rem"></div>
-      <div id="msg" class="msg" role="status" aria-live="polite"></div>
-    </section>
-
-    <section id="formArea" class="card hidden" aria-label="入力フォーム">
-      <!-- 動的にフィールドを構築 -->
-      <div class="field">
-        <div class="label">対象コース：</div>
-        <div>
-          <input id="courseInput" type="text" placeholder="コース名を入力" />
-        </div>
-      </div>
-
-      <div class="field">
-        <div class="label">実施業務：</div>
-        <div>
-          <input id="workInput" type="text" placeholder="プルダウンからの選択 or 直接入力" list="workOptions" />
-          <datalist id="workOptions">
-            <option value="キャディ1R"></option>
-            <option value="キャディ1.5R"></option>
-            <option value="キャディ2R"></option>
-            <option value="全日ポーター"></option>
-            <option value="半日ポーター"></option>
-            <option value="当日キャンセル"></option>
-          </datalist>
-        </div>
-      </div>
-
-      <div class="field">
-        <div class="label">チョコ券枚数：</div>
-        <div>
-          <input id=\"ticketInput\" type=\"text\" placeholder=\"0以上の半角数字で入力\" />
-        </div>
-      </div>
-
-      <div class="field">
-        <div class="label">報告事項：</div>
-        <div>
-          <textarea id="reportInput" rows="1" placeholder="無し or 遅刻、打球事故、クラブ・カバーの紛失・破損、備品の紛失・破損 などを入力"></textarea>
-        </div>
-      </div>
-
-      <div class="field">
-        <div class="label">お客様から褒められたこと：</div>
-        <div>
-          <textarea id="praiseInput" rows="1" placeholder="入力必須"></textarea>
-        </div>
-      </div>
-    </section>
-
-    <div class="footer-space"></div>
-  </div>
-
-  <script>
+<script>
   (function(){
-    const VERSION = 'Ver.2025-09-06a';
+    const VERSION = 'Ver.2025-09-06c';
     const GAS_DEPLOY_ID = 'AKfycbxrnvzng88PDqgnubPyHC1n82EXZn8_zHU9EoAL922BcKwDc4QamCtQlpiaSwdWwS3mNg';
     const GAS_BASE_URL = `https://script.google.com/macros/s/${GAS_DEPLOY_ID}/exec`;
 
@@ -174,11 +26,8 @@
       status: document.getElementById('status'),
     };
 
-    // ===== Util =====
-    const $ = (sel, root=document) => root.querySelector(sel);
-
+    // ===== Utils =====
     function yyyymmddJST(date=new Date()){
-      // JST での今日
       const tz = 9 * 60; // minutes
       const t = date.getTime() + (date.getTimezoneOffset() + tz) * 60000;
       const d = new Date(t);
@@ -187,44 +36,57 @@
       const da = String(d.getDate()).padStart(2,'0');
       return `${y}${m}${da}`;
     }
-
     function showMsg(text, cls=''){
       els.msg.className = 'msg ' + (cls||'');
       els.msg.textContent = text || '';
     }
-
     function setBusy(on){
       els.status.innerHTML = on ? `<span class="spinner" aria-label="読み込み中"></span> 処理中…` : '';
     }
+    function confirmBox(message){ return window.confirm(message); }
 
-    function confirmBox(message){
-      return window.confirm(message);
+    // --- form helpers ---
+    function autoGrow(textarea){
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(240, Math.max(38, textarea.scrollHeight)) + 'px';
+    }
+    function hydrateAutoGrow(){
+      [els.reportInput, els.praiseInput].forEach(t => {
+        if(!t) return;
+        t.addEventListener('input', () => autoGrow(t));
+        setTimeout(() => autoGrow(t), 0);
+      });
+    }
+    function setFormVisible(on){
+      els.formArea.classList.toggle('hidden', !on);
+      els.submitBtn.disabled = !on;
+    }
+    function clearForm(){
+      els.courseInput.value = '';
+      els.workInput.value = '';
+      els.ticketInput.value = '';
+      els.reportInput.value = '';
+      els.praiseInput.value = '';
+      hydrateAutoGrow();
+    }
+    function fillFormFromJobInfoRow(row){
+      // row: [メンバ名, 2列目, 3列目, 4列目(対象コース), ...]
+      const course = (row && row[3]) ? String(row[3]).trim() : '';
+      els.courseInput.value = course;
+      els.workInput.value = '';
+      els.ticketInput.value = '';
+      els.reportInput.value = '';
+      els.praiseInput.value = '';
+      hydrateAutoGrow();
     }
 
-    // CSV helpers
-    function escapeCsvCell(val){
-      const s = (val ?? '').toString();
-      const needsQuote = /[",\n\r]/.test(s) || s.includes(',');
-      const esc = s.replace(/"/g, '""');
-      return needsQuote ? `"${esc}"` : esc;
-    }
-
-    function toCsv(lines){
-      const CRLF = '\r\n';
-      return lines.map(row => row.map(escapeCsvCell).join(',')).join(CRLF) + CRLF;
-    }
-
-    function withBOM(text){
-      return '\uFEFF' + text; // UTF-8 BOM
-    }
-
+    // --- CSV（読込用シンプル） ---
     function parseCsv(text){
-      // シンプル CSV パーサ（クォート対応）
       const rows = [];
       let i = 0, field = '', row = [], inQuote = false;
       const pushField = () => { row.push(field); field=''; };
       const pushRow = () => { rows.push(row); row=[]; };
-      const s = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const s = String(text||'').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       while(i < s.length){
         const ch = s[i++];
         if(inQuote){
@@ -239,22 +101,11 @@
           else { field += ch; }
         }
       }
-      // 最終フィールド/行
       if(field.length>0 || row.length>0){ pushField(); pushRow(); }
       return rows;
     }
 
-    function autoGrow(textarea){
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.min(240, Math.max(38, textarea.scrollHeight)) + 'px';
-    }
-
-    function setFormVisible(on){
-      els.formArea.classList.toggle('hidden', !on);
-      els.submitBtn.disabled = !on;
-    }
-
-    // GAS helpers
+    // ===== GAS helpers =====
     async function gasGet(params){
       const url = new URL(GAS_BASE_URL);
       Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
@@ -264,7 +115,6 @@
       if(ct.includes('application/json')) return res.json();
       return res.text();
     }
-
     async function gasPost(params, body){
       const url = new URL(GAS_BASE_URL);
       Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k, v));
@@ -278,65 +128,26 @@
       if(ct.includes('application/json')) return res.json();
       return res.text();
     }
-
-    async function listFiles(folder){
-      return gasGet({ action: 'list', folder });
-    }
-    async function readFile(folder, file){
-      return gasGet({ action: 'read', folder, file });
-    }
+    async function listFiles(folder){ return gasGet({ action: 'list', folder }); }
+    async function readFile(folder, file){ return gasGet({ action: 'read', folder, file }); }
     async function overwriteFile(folder, filename, content){
-      // Excel 対策：UTF-8 BOM + CRLF
+      // Excel対策：BOM + CRLF
       const CRLF = '\r\n';
       const txt = content.replace(/\r?\n/g, CRLF);
       const withBom = '\uFEFF' + txt;
       return gasPost({ action: 'overwrite', folder, filename }, withBom);
     }
 
-    // Domain helpers
-    function requireYyyymmdd(v){
-      return /^\d{8}$/.test(v);
-    }
-    function getUserName(){
-      return localStorage.getItem('userName') || '';
-    }
-    function targetReportName(date8, userName){
-      return `${date8}_${userName}_業務終了報告.csv`;
-    }
-    function jobInfoName(date8){
-      return `${date8}_業務連絡.csv`;
-    }
-
-    function hydrateAutoGrow(){
-      [els.reportInput, els.praiseInput].forEach(t => {
-        t.addEventListener('input', () => autoGrow(t));
-        setTimeout(() => autoGrow(t), 0);
-      });
-    }
-
-    function clearForm(){
-      els.courseInput.value = '';
-      els.workInput.value = '';
-      els.ticketInput.value = '';
-      els.reportInput.value = '';
-      els.praiseInput.value = '';
-      hydrateAutoGrow();
-    }
-
-    function fillFormFromJobInfoRow(row){
-      // row: [メンバ名, 2列目, 3列目, 4列目(対象コース), ...]
-      const course = (row && row[3]) ? String(row[3]).trim() : '';
-      els.courseInput.value = course;
-      els.workInput.value = '';
-      els.ticketInput.value = '';
-      els.reportInput.value = '';
-      els.praiseInput.value = '';
-      hydrateAutoGrow();
-    }
+    // ===== Domain helpers =====
+    function requireYyyymmdd(v){ return /^\d{8}$/.test(v); }
+    function getUserName(){ return localStorage.getItem('userName') || ''; }
+    function getUserRole(){ return localStorage.getItem('userRole') || ''; }
+    function targetReportName(date8, userName){ return `${date8}_${userName}_業務終了報告.csv`; }
+    function jobInfoName(date8){ return `${date8}_業務連絡.csv`; }
 
     function fillFormFromReportCsv(csv){
       // 1行目: yyyymmdd,メンバ名,"業務終了報告"
-      // 2以降："対象コース", 値 ... の形式
+      // 2行目以降: "見出し", 値
       const rows = parseCsv(csv);
       const map = new Map();
       for(let i=1;i<rows.length;i++){
@@ -355,16 +166,16 @@
     async function tryReadExistingReport(date8, userName){
       const filename = targetReportName(date8, userName);
       try {
-        // まず一覧で存在確認（誤検知防止）
+        // 誤判定防止：まず一覧で存在確認
         const list = await listFiles(FOLDERS.workCompletion);
         if(!Array.isArray(list) || !list.includes(filename)) return null;
+
         const txt = await readFile(FOLDERS.workCompletion, filename);
         if(typeof txt !== 'string') return null;
-        // 空や明らかなエラーレスポンスは除外
         const trimmed = txt.trim();
         if(!trimmed) return null;
         if(/^\{/.test(trimmed)){
-          try{ const j = JSON.parse(trimmed); if(j && j.error) return null; }catch(_){/*not json*/}
+          try{ const j = JSON.parse(trimmed); if(j && j.error) return null; }catch(_){/* not JSON */ }
         }
         if(/not\s*found|エラー|不存在|404/i.test(trimmed)) return null;
         return txt;
@@ -395,28 +206,27 @@
     }
 
     function buildOutputCsv(date8, userName){
+      const CRLF = '\r\n';
+      const esc = (s)=>{ s=(s??'').toString(); return '"'+ s.replace(/"/g,'""') +'"'; };
       const lines = [];
-      lines.push([date8, userName, '"業務終了報告"']);
-      lines.push(['"対象コース"', els.courseInput.value]);
-      lines.push(['"実施業務"', els.workInput.value]);
-      lines.push(['"チョコ券枚数"', els.ticketInput.value]);
-      lines.push(['"報告事項"', els.reportInput.value]);
-      lines.push(['"お客様から褒められたこと"', els.praiseInput.value]);
-      return toCsv(lines);
+      lines.push([date8, userName, esc('業務終了報告')].join(','));
+      lines.push([esc('対象コース'), esc(els.courseInput.value)].join(','));
+      lines.push([esc('実施業務'), esc(els.workInput.value)].join(','));
+      lines.push([esc('チョコ券枚数'), esc(els.ticketInput.value)].join(','));
+      lines.push([esc('報告事項'), esc(els.reportInput.value)].join(','));
+      lines.push([esc('お客様から褒められたこと'), esc(els.praiseInput.value)].join(','));
+      return '\uFEFF' + lines.join(CRLF) + CRLF; // BOM + CRLF
     }
 
     function validateBeforeSubmit(){
-      // チョコ券枚数
       if(!/^\d+$/.test((els.ticketInput.value||'').trim())){
         alert('チョコ券枚数は 0 以上の半角数字で入力してください。');
         return false;
       }
-      // 報告事項
       if((els.reportInput.value||'').trim() === ''){
         alert('報告事項が未入力です。');
         return false;
       }
-      // お客様から褒められたこと
       if((els.praiseInput.value||'').trim() === ''){
         alert('お客様から褒められたことが未入力です。');
         return false;
@@ -424,17 +234,18 @@
       return true;
     }
 
-    // ===== Event handlers =====
-    els.backBtn.addEventListener('click', () => {
-      // 呼ばれた元へ戻る（固定指定）
-      window.location.href = 'top_menu.html';
-    });
+    // ===== init & events =====
+    els.backBtn.addEventListener('click', () => { window.location.href = 'top_menu.html'; });
 
     els.versionText.textContent = VERSION;
-    els.dateInput.value = yyyymmddJST();
+    const uName = getUserName() || '未ログイン';
+    const role = getUserRole();
+    els.userInfoText.textContent = role ? `${uName}(${role})` : uName;
 
+    els.dateInput.value = yyyymmddJST();
     hydrateAutoGrow();
 
+    // 「業務終了報告」押下
     els.startBtn.addEventListener('click', async () => {
       showMsg('');
       const date8 = (els.dateInput.value||'').trim();
@@ -450,7 +261,6 @@
 
       setBusy(true);
       try {
-        // 既存ファイル有無
         const existingCsv = await tryReadExistingReport(date8, userName);
         if(existingCsv){
           const ok = confirmBox('報告済みですが、修正しますか。');
@@ -458,14 +268,14 @@
           setFormVisible(true);
           clearForm();
           fillFormFromReportCsv(existingCsv);
-          showMsg(`既存の内容を読み込みました。`);
+          showMsg('既存の内容を読み込みました。');
+          setBusy(false);
           return;
         }
 
         const ok = confirmBox('新規報告ですね。');
         if(!ok){ setBusy(false); return; }
 
-        // 業務連絡の読み込み
         const jobInfo = await loadJobInformation(date8);
         if(!jobInfo){
           alert('終了報告すべき業務はありません。');
@@ -488,6 +298,7 @@
       }
     });
 
+    // 「報告提出」押下
     els.submitBtn.addEventListener('click', async () => {
       const date8 = (els.dateInput.value||'').trim();
       if(!requireYyyymmdd(date8)){
@@ -499,7 +310,6 @@
         showMsg('ログイン情報（userName）が見つかりません。index.html でログインしてください。', 'error');
         return;
       }
-
       if(!validateBeforeSubmit()) return;
 
       const filename = targetReportName(date8, userName);
@@ -517,6 +327,6 @@
     });
 
   })();
-  </script>
+</script>
 </body>
 </html>
