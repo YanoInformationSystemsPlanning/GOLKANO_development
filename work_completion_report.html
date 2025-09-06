@@ -109,7 +109,8 @@
       <div class="field">
         <div class="label">実施業務：</div>
         <div>
-          <input id="workInput" type="text" placeholder="プルダウンからの選択 or 直接入力" list="workOptions" />
+          <!-- 仕様変更：ガイダンス文言のみ（機能変更なし） -->
+          <input id="workInput" type="text" placeholder="選択 or 直接入力" list="workOptions" />
           <datalist id="workOptions">
             <option value="キャディ1R"></option>
             <option value="キャディ1.5R"></option>
@@ -122,7 +123,8 @@
       </div>
 
       <div class="field">
-        <div class="label">チョコ券枚数：</div>
+        <!-- 仕様変更：ラベル文言のみ -->
+        <div class="label">チョコ券枚数(無しは0を入力)：</div>
         <div>
           <input id="ticketInput" type="text" placeholder="0以上の半角数字で入力" />
         </div>
@@ -131,7 +133,19 @@
       <div class="field">
         <div class="label">報告事項：</div>
         <div>
-          <textarea id="reportInput" rows="1" placeholder="無し or 遅刻、打球事故、クラブ・カバーの紛失・破損、備品の紛失・破損 などを入力"></textarea>
+          <!-- 仕様追加：6項目プルダウン（選択→入力欄へ上書き、選択後も自由編集可） -->
+          <div class="row" style="gap:.5rem .5rem; align-items:start; margin-bottom:.5rem;">
+            <select id="reportSelect">
+              <option value="">（選択してください）</option>
+              <option value="無し">無し</option>
+              <option value="遅刻">遅刻</option>
+              <option value="打球事故">打球事故</option>
+              <option value="クラブ・カバーの紛失・破損">クラブ・カバーの紛失・破損</option>
+              <option value="備品の紛失・破損">備品の紛失・破損</option>
+            </select>
+          </div>
+          <!-- 仕様変更：ガイダンス文言のみ -->
+          <textarea id="reportInput" rows="1" placeholder="選択 or 直接編集"></textarea>
         </div>
       </div>
 
@@ -168,6 +182,8 @@
       courseInput: document.getElementById('courseInput'),
       workInput: document.getElementById('workInput'),
       ticketInput: document.getElementById('ticketInput'),
+      // 追加参照
+      reportSelect: document.getElementById('reportSelect'),
       reportInput: document.getElementById('reportInput'),
       praiseInput: document.getElementById('praiseInput'),
       msg: document.getElementById('msg'),
@@ -366,7 +382,7 @@
       lines.push([esc('チョコ券枚数'), esc(els.ticketInput.value)].join(','));
       lines.push([esc('報告事項'), esc(els.reportInput.value)].join(','));
       lines.push([esc('お客様から褒められたこと'), esc(els.praiseInput.value)].join(','));
-      return '\uFEFF' + lines.join(CRLF) + CRLF; // BOM + CRLF
+      return '\uFEFF' + lines.join(CRLF) + CRLF; // BOM + CRLF（原仕様を維持）
     }
 
     function validateBeforeSubmit(){
@@ -395,6 +411,17 @@
 
     els.dateInput.value = yyyymmddJST();
     hydrateAutoGrow();
+
+    // 追加：報告事項のセレクト選択 → テキストエリアへ上書き（選択後も自由編集可）
+    if(els.reportSelect){
+      els.reportSelect.addEventListener('change', () => {
+        const v = els.reportSelect.value;
+        if(v !== ''){
+          els.reportInput.value = v;
+          autoGrow(els.reportInput);
+        }
+      });
+    }
 
     // 「業務終了報告」押下
     els.startBtn.addEventListener('click', async () => {
