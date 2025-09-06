@@ -318,8 +318,8 @@
     function jobInfoName(date8){ return `${date8}_業務連絡.csv`; }
 
     function fillFormFromReportCsv(csv){
-      // 1行目: yyyymmdd,メンバ名,"業務終了報告"
-      // 2行目以降: "見出し", 値
+      // 1行目: yyyymmdd,メンバ名,\"業務終了報告\"
+      // 2行目以降: \"見出し\", 値
       const rows = parseCsv(csv);
       const map = new Map();
       for(let i=1;i<rows.length;i++){
@@ -439,7 +439,7 @@
       });
     }
 
-    // 「業務終了報告」押下
+    // 「業務終了報告」押下（仕様どおりの順序に変更済み）
     els.startBtn.addEventListener('click', async () => {
       showMsg('');
       const date8 = (els.dateInput.value||'').trim();
@@ -455,35 +455,63 @@
 
       setBusy(true);
       try {
-        const existingCsv = await tryReadExistingReport(date8, userName);
-        if(existingCsv){
-          const ok = confirmBox('報告済みですが、修正しますか。');
-          if(!ok){ setBusy(false); return; }
-          setFormVisible(true);
-          clearForm();
-          fillFormFromReportCsv(existingCsv);
-          showMsg('既存の内容を読み込みました。');
-          setBusy(false);
-          return;
-        }
-
-        const ok = confirmBox('新規報告ですね。');
-        if(!ok){ setBusy(false); return; }
-
+        // ① 先に job_information を確認 → 行と4列目の有無で判定
         const jobInfo = await loadJobInformation(date8);
         if(!jobInfo){
           alert('終了報告すべき業務はありません。');
-          setBusy(false); return;
+          return;
         }
         const row = findRowForUser(jobInfo, userName);
         if(!row || !row[3] || String(row[3]).trim()===''){
           alert('終了報告すべき業務はありません。');
-          setBusy(false); return;
+          return;
         }
-        setFormVisible(true);
-        clearForm();
-        fillFormFromJobInfoRow(row);
-        showMsg('入力フォームを初期化しました。');
+
+        // ② 4列目がある場合のみ、report の存在確認
+        const filename = targetReportName(date8, userName);
+        let exists = false;
+        try {
+          const list = await listFiles(FOLDERS.workCompletion);
+          const names = Array.isArray(list) ? list : (Array.isArray(list?.files) ? list.files : []);
+          exists = names.includes(filename);
+        } catch(_) {
+          // list 未対応の場合は read 成否で判定
+          try { const txt = await readFile(FOLDERS.workCompletion, filename); exists = !!(typeof txt==='string' && txt.trim()); } catch(__) { exists = false; }
+        }
+
+        if(!exists){
+          // ③ 新規確認
+          const ok = confirmBox('新規報告ですね。');
+          if(!ok) return;
+          setFormVisible(true);
+          clearForm();
+          fillFormFromJobInfoRow(row); // 対象コース=4列目, 実施業務=5列目 初期化
+          showMsg('入力フォームを初期化しました。');
+        } else {
+          // ④ 既存修正確認
+          const ok = confirmBox('報告済みですが、修正しますか。');
+          if(!ok) return;
+          try{
+            const existingCsv = await readFile(FOLDERS.workCompletion, filename);
+            if(typeof existingCsv==='string' && existingCsv.trim()){
+              setFormVisible(true);
+              clearForm();
+              fillFormFromReportCsv(existingCsv);
+              showMsg('既存の内容を読み込みました。');
+            } else {
+              // 読めなかった場合は新規として開始
+              setFormVisible(true);
+              clearForm();
+              fillFormFromJobInfoRow(row);
+              showMsg('既存ファイルの読込に失敗したため、新規として開始します。');
+            }
+          }catch(e){
+            setFormVisible(true);
+            clearForm();
+            fillFormFromJobInfoRow(row);
+            showMsg('既存ファイルの読込に失敗したため、新規として開始します。');
+          }
+        }
       } catch(err){
         console.error(err);
         showMsg('処理中にエラーが発生しました。通信状況をご確認ください。', 'error');
