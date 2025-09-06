@@ -120,6 +120,29 @@
   }
   function confirmBox(message){ return window.confirm(message); }
 
+  
+  // --- Concurrency helpers (UI変更なし; 既定5並列, localStorage/変数で可変) ---
+  function getConcurrency(){
+    const v = Number(localStorage.getItem('agg_conc') ?? window.AGG_CONCURRENCY ?? 5);
+    if (Number.isFinite(v) && v >= 1 && v <= 16) return Math.floor(v);
+    return 5;
+  }
+  async function pooledMap(concurrency, items, worker, onProgress){
+    const results = new Array(items.length);
+    const n = Math.min(Math.max(1, (concurrency|0) || 1), 16);
+    let idx = 0, done = 0;
+    async function run(){
+      while(true){
+        const i = idx++; if(i >= items.length) return;
+        try{ results[i] = await worker(items[i], i); }
+        catch{ results[i] = null; }
+        finally{ done++; onProgress && onProgress(done, items.length); }
+      }
+    }
+    await Promise.all(Array.from({length: Math.min(n, items.length)}, run));
+    return results;
+  }
+
   // ===== CSV helpers =====
   function parseCsv(text){
     const rows = [];
@@ -231,21 +254,29 @@
       // 先頭行：ヘッダ
       stack.push(['日付','メンバ名','対象コース','実施業務','チョコ券枚数','報告事項','お客様に褒められたこと']);
 
-      // 3) 各ファイルを順に読み取り
-      let processed = 0;
-      for(const fn of targets){
-        els.status.innerHTML = `<span class="spinner" aria-label="読み込み中"></span> 読込中… (${processed+1}/${targets.length})`;
-        try{
+      // 3) 各ファイルを並列で読み取り（最大 getConcurrency()）
+      els.status.innerHTML = `<span class="spinner" aria-label="読み込み中"></span> 読込中… (0/${targets.length})`;
+      const rowsFromFiles = await pooledMap(
+        getConcurrency(),
+        targets,
+        async (fn) => {
           const csv = await readFile(FOLDERS.workCompletion, fn);
-          if(typeof csv === 'string' && csv.trim()){
-            const row = extractRowFromReportCsv(csv);
-            // 列方向7つをそのまま push
-            stack.push(row);
+          if (typeof csv === 'string' && csv.trim()) {
+            return extractRowFromReportCsv(csv);
           }
-        }catch(e){ /* 個別失敗はスキップ */ }
-        processed++;
+          return null;
+        },
+        (done, total) => {
+          els.status.innerHTML = `<span class="spinner" aria-label="読み込み中"></span> 読込中… (${done}/${total})`;
+        }
+      );
+      for (const r of rowsFromFiles) {
+        if (r) {
+          // 列方向7つをそのまま push
+          stack.push(r);
+        }
       }
-
+      
       // 4) 出力CSVを構築
       const outCsv = buildCsvFromRows(stack);
       const outName = `${ym}_業務終了報告集約.csv`;
